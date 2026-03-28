@@ -1,0 +1,40 @@
+type Query {
+  user(id: ID!): User
+  users(filter: UserFilter): [User!]!
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  deleteUser(id: ID!): Boolean!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String
+  role: Role!
+}
+
+enum Role {
+  ADMIN
+  USER
+  GUEST
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+  role: Role
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+  role: Role
+}
+
+input UserFilter {
+  role: Role
+  nameContains: String
+}

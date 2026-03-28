@@ -1,0 +1,61 @@
+package {{.PackageName}}
+
+// GraphQLError represents a GraphQL error in the response.
+type GraphQLError struct {
+	Message    string         `json:"message"`
+	Path       []any          `json:"path,omitempty"`
+	Extensions map[string]any `json:"extensions,omitempty"`
+}
+
+{{range .EnumTypes -}}
+{{$enumName := .Name -}}
+type {{.Name}} string
+
+const (
+{{- range .Values}}
+	{{.GoName}} {{$enumName}} = "{{.Value}}"
+{{- end}}
+)
+
+{{end -}}
+
+{{range .InputTypes -}}
+type {{.Name}} struct {
+{{- range .Fields}}
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}{{if .OmitEmpty}},omitempty{{end}}"`
+{{- end}}
+}
+
+{{end -}}
+
+{{range .Operations -}}
+// {{.VariablesType}} contains the variables for the {{.Name}} operation.
+type {{.VariablesType}} struct {
+{{- range .Variables}}
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}"`
+{{- end}}
+}
+
+// {{.ResponseType}} contains the data returned by the {{.Name}} operation.
+type {{.ResponseType}} struct {
+{{- range .ResponseFields}}
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}"`
+{{- end}}
+}
+
+{{template "nestedTypes" .ResponseFields}}
+{{end -}}
+
+{{define "nestedTypes"}}
+{{- range .}}
+{{- if .NestedFields}}
+type {{.TypeName}} struct {
+{{- range .NestedFields}}
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}"`
+{{- end}}
+}
+
+{{template "nestedTypes" .NestedFields}}
+{{- end}}
+{{- end}}
+{{- end}}

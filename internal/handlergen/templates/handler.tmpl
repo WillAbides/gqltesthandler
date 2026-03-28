@@ -1,0 +1,94 @@
+package {{.PackageName}}
+
+import (
+	"net/http"
+)
+
+// TestHandler is a mock GraphQL HTTP handler for testing.
+// Set expectations with Expect methods, then use as an http.Handler.
+type TestHandler struct {
+	tb TB
+	handler http.Handler
+{{range .Operations}}
+	{{.ExpectationField}} expectResponses[{{.VariablesType}}, {{.ResultInterface}}]
+{{- end}}
+}
+
+func (s *TestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.handler.ServeHTTP(w, r)
+}
+
+// NewTestHandler creates a new TestHandler for use in tests.
+func NewTestHandler(tb TB) *TestHandler {
+	th := &TestHandler{tb: tb}
+	th.handler = &testServer{tb: tb, handler: th}
+	return th
+}
+
+{{range .Operations -}}
+{{$op := . -}}
+
+// {{.ResultInterface}} is the result interface for the {{.Name}} operation.
+type {{.ResultInterface}} interface {
+	write{{.Name}}Result(w http.ResponseWriter) error
+}
+
+type {{.LowercaseName}}DataResult struct {
+	data {{.ResponseType}}
+}
+
+func (r {{.LowercaseName}}DataResult) write{{.Name}}Result(w http.ResponseWriter) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type {{.LowercaseName}}ErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r {{.LowercaseName}}ErrorResult) write{{.Name}}Result(w http.ResponseWriter) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type {{.LowercaseName}}RawResult struct {
+	vars {{.VariablesType}}
+	fn   func({{.VariablesType}}, http.ResponseWriter)
+}
+
+func (r {{.LowercaseName}}RawResult) write{{.Name}}Result(w http.ResponseWriter) error {
+	r.fn(r.vars, w)
+	return nil
+}
+
+// {{.BuilderTypeName}} is a builder for setting the response of a {{.Name}} expectation.
+type {{.BuilderTypeName}} struct {
+	handler *TestHandler
+	vars    {{.VariablesType}}
+	opts    []ExpectOption
+}
+
+// Respond sets the expectation to return the given data.
+func (b *{{.BuilderTypeName}}) Respond(data {{.ResponseType}}) {
+	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}DataResult{data: data}, b.opts...)
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *{{.BuilderTypeName}}) RespondError(errors ...GraphQLError) {
+	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}ErrorResult{errors: errors}, b.opts...)
+}
+
+// Handle sets the expectation to invoke a custom handler function.
+func (b *{{.BuilderTypeName}}) Handle(fn func({{.VariablesType}}, http.ResponseWriter)) {
+	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}RawResult{vars: b.vars, fn: fn}, b.opts...)
+}
+
+// Expect{{.Name}} sets up an expectation for the {{.Name}} operation.
+func (s *TestHandler) Expect{{.Name}}(vars {{.VariablesType}}, opts ...ExpectOption) *{{.BuilderTypeName}} {
+	return &{{.BuilderTypeName}}{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+{{end -}}
+

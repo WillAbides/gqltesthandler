@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/golangci/golangci-lint/refs/heads/main/jsonschema/golangci.jsonschema.json
+
+version: "2"
+linters:
+  enable:
+    - gocritic
+    - gosec
+    - revive
+    - unconvert
+    - modernize
+  settings:
+    errcheck:
+      check-blank: true
+    gocritic:
+      enabled-tags:
+        - style
+        - diagnostic
+        - performance
+      disabled-checks:
+        - rangeValCopy
+        - ptrToRefParam
+        - regexpSimplify
+        - hugeParam
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+      settings:
+        shadow:
+          strict: true
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+    gosec:
+      excludes:
+        - G304 # file path provided by user input
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - goconst
+          - gosec
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
