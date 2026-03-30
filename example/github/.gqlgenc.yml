@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/99designs/gqlgen/refs/heads/master/gqlgen.schema.json
+model:
+  package: client
+  filename: ./client/models_gen.go
+client:
+  package: client
+  filename: ./client/client.go
+schema:
+  - schema.graphqls
+query:
+  - operations.graphql
+generate:
+  clientV2: true
+  onlyUsedModels: true

@@ -1,41 +1,24 @@
 package github_test
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	ghclient "github.com/willabides/gqltesthandler/example/github/client"
 	"github.com/willabides/gqltesthandler/example/github/ghtest"
 )
 
-// graphqlDo sends a GraphQL request and decodes the response.
-func graphqlDo(t *testing.T, url, operationName string, variables any) map[string]any {
-	t.Helper()
-	body, err := json.Marshal(map[string]any{
-		"operationName": operationName,
-		"variables":     variables,
-	})
-	require.NoError(t, err)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, resp.Body.Close())
-	}()
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(respBody, &result))
-	return result
-}
+//go:generate go run github.com/gqlgo/gqlgenc
+//go:generate go tool gqltesthandler --schema=schema.graphqls --operations=operations.graphql -o ghtest
 
 func TestGetPullRequestReviews(t *testing.T) {
 	handler := ghtest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
 	defer server.Close()
+
+	client := ghclient.NewClient(http.DefaultClient, server.URL, nil)
 
 	handler.ExpectGetPullRequestReviews(ghtest.GetPullRequestReviewsVariables{
 		Owner:      "octocat",
@@ -51,9 +34,6 @@ func TestGetPullRequestReviews(t *testing.T) {
 							Url:   "https://github.com/octocat/hello-world/pull/42#pullrequestreview-1",
 							Body:  "Looks good!",
 							State: ghtest.PullRequestReviewStateApproved,
-							Author: &ghtest.GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthor{
-								Url: "https://github.com/reviewer",
-							},
 						},
 					},
 					PageInfo: ghtest.GetPullRequestReviewsResponseRepositoryPullRequestReviewsPageInfo{
@@ -64,32 +44,23 @@ func TestGetPullRequestReviews(t *testing.T) {
 		},
 	})
 
-	result := graphqlDo(t, server.URL, "GetPullRequestReviews", map[string]any{
-		"owner":      "octocat",
-		"repo":       "hello-world",
-		"pullNumber": 42,
-	})
+	resp, err := client.GetPullRequestReviews(t.Context(), "octocat", "hello-world", 42, nil)
+	require.NoError(t, err)
 
-	data, ok := result["data"].(map[string]any)
-	require.True(t, ok, "expected data in response")
-	repo, ok := data["repository"].(map[string]any)
-	require.True(t, ok)
-	pr, ok := repo["pullRequest"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "https://github.com/octocat/hello-world/pull/42", pr["url"])
-
-	reviews := pr["reviews"].(map[string]any)
-	nodes := reviews["nodes"].([]any)
-	require.Len(t, nodes, 1)
-	review := nodes[0].(map[string]any)
-	require.Equal(t, "Looks good!", review["body"])
-	require.Equal(t, "APPROVED", review["state"])
+	require.Equal(t, "https://github.com/octocat/hello-world/pull/42", resp.Repository.PullRequest.URL)
+	reviews := resp.Repository.PullRequest.Reviews.Nodes
+	require.Len(t, reviews, 1)
+	require.Equal(t, "Looks good!", reviews[0].Body)
+	require.Equal(t, ghclient.PullRequestReviewStateApproved, reviews[0].State)
+	require.False(t, resp.Repository.PullRequest.Reviews.PageInfo.HasNextPage)
 }
 
 func TestGetPullRequestReviews_Error(t *testing.T) {
 	handler := ghtest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
 	defer server.Close()
+
+	client := ghclient.NewClient(http.DefaultClient, server.URL, nil)
 
 	handler.ExpectGetPullRequestReviews(ghtest.GetPullRequestReviewsVariables{
 		Owner:      "octocat",
@@ -99,23 +70,17 @@ func TestGetPullRequestReviews_Error(t *testing.T) {
 		ghtest.GraphQLError{Message: "Could not resolve to a Repository with the name 'nonexistent'."},
 	)
 
-	result := graphqlDo(t, server.URL, "GetPullRequestReviews", map[string]any{
-		"owner":      "octocat",
-		"repo":       "nonexistent",
-		"pullNumber": 1,
-	})
-
-	errors, ok := result["errors"].([]any)
-	require.True(t, ok, "expected errors in response")
-	require.Len(t, errors, 1)
-	errObj := errors[0].(map[string]any)
-	require.Contains(t, errObj["message"], "nonexistent")
+	_, err := client.GetPullRequestReviews(t.Context(), "octocat", "nonexistent", 1, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nonexistent")
 }
 
 func TestGetPullRequestThreads(t *testing.T) {
 	handler := ghtest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
 	defer server.Close()
+
+	client := ghclient.NewClient(http.DefaultClient, server.URL, nil)
 
 	handler.ExpectGetPullRequestThreads(ghtest.GetPullRequestThreadsVariables{
 		Owner:      "octocat",
@@ -154,28 +119,18 @@ func TestGetPullRequestThreads(t *testing.T) {
 		},
 	})
 
-	result := graphqlDo(t, server.URL, "GetPullRequestThreads", map[string]any{
-		"owner":      "octocat",
-		"repo":       "hello-world",
-		"pullNumber": 42,
-	})
+	resp, err := client.GetPullRequestThreads(t.Context(), "octocat", "hello-world", 42, nil, nil)
+	require.NoError(t, err)
 
-	data := result["data"].(map[string]any)
-	repo := data["repository"].(map[string]any)
-	pr := repo["pullRequest"].(map[string]any)
-	threads := pr["reviewThreads"].(map[string]any)
-	nodes := threads["nodes"].([]any)
-	require.Len(t, nodes, 1)
-	thread := nodes[0].(map[string]any)
-	require.Equal(t, "RT_1", thread["id"])
-	require.Equal(t, "main.go", thread["path"])
-	require.Equal(t, false, thread["isResolved"])
+	threads := resp.Repository.PullRequest.ReviewThreads.Nodes
+	require.Len(t, threads, 1)
+	require.Equal(t, "RT_1", threads[0].ID)
+	require.Equal(t, "main.go", threads[0].Path)
+	require.False(t, threads[0].IsResolved)
 
-	comments := thread["comments"].(map[string]any)
-	commentNodes := comments["nodes"].([]any)
-	require.Len(t, commentNodes, 1)
-	comment := commentNodes[0].(map[string]any)
-	require.Equal(t, "Consider using a constant here.", comment["body"])
+	comments := threads[0].Comments.Nodes
+	require.Len(t, comments, 1)
+	require.Equal(t, "Consider using a constant here.", comments[0].Body)
 }
 
 func TestGetPullRequestReviews_Pagination(t *testing.T) {
@@ -183,9 +138,11 @@ func TestGetPullRequestReviews_Pagination(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
+	client := ghclient.NewClient(http.DefaultClient, server.URL, nil)
+
 	cursor := "cursor123"
 
-	// First page
+	// First page — nil cursor
 	handler.ExpectGetPullRequestReviews(ghtest.GetPullRequestReviewsVariables{
 		Owner:      "octocat",
 		Repo:       "hello-world",
@@ -207,7 +164,7 @@ func TestGetPullRequestReviews_Pagination(t *testing.T) {
 		},
 	})
 
-	// Second page
+	// Second page — with cursor
 	handler.ExpectGetPullRequestReviews(ghtest.GetPullRequestReviewsVariables{
 		Owner:      "octocat",
 		Repo:       "hello-world",
@@ -230,18 +187,14 @@ func TestGetPullRequestReviews_Pagination(t *testing.T) {
 	})
 
 	// Fetch first page
-	page1 := graphqlDo(t, server.URL, "GetPullRequestReviews", map[string]any{
-		"owner": "octocat", "repo": "hello-world", "pullNumber": 42,
-	})
-	reviews1 := page1["data"].(map[string]any)["repository"].(map[string]any)["pullRequest"].(map[string]any)["reviews"].(map[string]any)
-	require.True(t, reviews1["pageInfo"].(map[string]any)["hasNextPage"].(bool))
+	page1, err := client.GetPullRequestReviews(t.Context(), "octocat", "hello-world", 42, nil)
+	require.NoError(t, err)
+	require.True(t, page1.Repository.PullRequest.Reviews.PageInfo.HasNextPage)
+	require.Equal(t, "First review", page1.Repository.PullRequest.Reviews.Nodes[0].Body)
 
 	// Fetch second page using cursor
-	page2 := graphqlDo(t, server.URL, "GetPullRequestReviews", map[string]any{
-		"owner": "octocat", "repo": "hello-world", "pullNumber": 42, "cursor": cursor,
-	})
-	reviews2 := page2["data"].(map[string]any)["repository"].(map[string]any)["pullRequest"].(map[string]any)["reviews"].(map[string]any)
-	nodes := reviews2["nodes"].([]any)
-	require.Equal(t, "LGTM!", nodes[0].(map[string]any)["body"])
-	require.False(t, reviews2["pageInfo"].(map[string]any)["hasNextPage"].(bool))
+	page2, err := client.GetPullRequestReviews(t.Context(), "octocat", "hello-world", 42, &cursor)
+	require.NoError(t, err)
+	require.False(t, page2.Repository.PullRequest.Reviews.PageInfo.HasNextPage)
+	require.Equal(t, "LGTM!", page2.Repository.PullRequest.Reviews.Nodes[0].Body)
 }

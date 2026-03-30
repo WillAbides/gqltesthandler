@@ -1,5 +1,0 @@
-schema: schema.graphqls
-operations:
-  - operations.graphql
-generated: generated.go
-package: userapi

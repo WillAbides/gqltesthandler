@@ -5,20 +5,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Khan/genqlient/graphql"
 	"github.com/stretchr/testify/require"
-	"github.com/willabides/gqltesthandler/example/userapi"
+	userclient "github.com/willabides/gqltesthandler/example/userapi/client"
 	"github.com/willabides/gqltesthandler/example/userapi/usertest"
 )
+
+//go:generate go run github.com/gqlgo/gqlgenc
+//go:generate go tool gqltesthandler --schema=schema.graphqls --operations=operations.graphql -o usertest
 
 func TestGetUser(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := graphql.NewClient(server.URL, http.DefaultClient)
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
 
-	// Set expectation: when GetUser is called with id "1", respond with Alice.
 	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
 		User: &usertest.GetUserResponseUser{
 			ID:    "1",
@@ -27,9 +28,9 @@ func TestGetUser(t *testing.T) {
 		},
 	})
 
-	resp, err := userapi.GetUser(t.Context(), client, "1")
+	resp, err := client.GetUser(t.Context(), "1")
 	require.NoError(t, err)
-	require.Equal(t, "1", resp.User.Id)
+	require.Equal(t, "1", resp.User.ID)
 	require.Equal(t, "Alice", resp.User.Name)
 	require.Equal(t, "alice@example.com", resp.User.Email)
 }
@@ -39,7 +40,7 @@ func TestCreateUser(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := graphql.NewClient(server.URL, http.DefaultClient)
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
 
 	handler.ExpectCreateUser(usertest.CreateUserVariables{
 		Input: usertest.CreateUserInput{Name: "Bob", Email: "bob@example.com"},
@@ -51,12 +52,12 @@ func TestCreateUser(t *testing.T) {
 		},
 	})
 
-	resp, err := userapi.CreateUser(t.Context(), client, userapi.CreateUserInput{
+	resp, err := client.CreateUser(t.Context(), userclient.CreateUserInput{
 		Name:  "Bob",
 		Email: "bob@example.com",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "2", resp.CreateUser.Id)
+	require.Equal(t, "2", resp.CreateUser.ID)
 	require.Equal(t, "Bob", resp.CreateUser.Name)
 }
 
@@ -65,13 +66,13 @@ func TestGetUser_Error(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := graphql.NewClient(server.URL, http.DefaultClient)
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
 
 	handler.ExpectGetUser(usertest.GetUserVariables{ID: "999"}).RespondError(
 		usertest.GraphQLError{Message: "user not found"},
 	)
 
-	_, err := userapi.GetUser(t.Context(), client, "999")
+	_, err := client.GetUser(t.Context(), "999")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "user not found")
 }
@@ -81,9 +82,8 @@ func TestGetUser_MultipleCalls(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	client := graphql.NewClient(server.URL, http.DefaultClient)
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
 
-	// Expect the same call 3 times.
 	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.Times(3)).Respond(usertest.GetUserResponse{
 		User: &usertest.GetUserResponseUser{
 			ID:    "1",
@@ -93,7 +93,7 @@ func TestGetUser_MultipleCalls(t *testing.T) {
 	})
 
 	for range 3 {
-		resp, err := userapi.GetUser(t.Context(), client, "1")
+		resp, err := client.GetUser(t.Context(), "1")
 		require.NoError(t, err)
 		require.Equal(t, "Alice", resp.User.Name)
 	}
