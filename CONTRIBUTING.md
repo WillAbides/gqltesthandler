@@ -1,9 +1,9 @@
-# Contributing to oapitesthandler
+# Contributing to gqltesthandler
 
 Your contributions are welcome here. Feel free to open issues and pull requests.
 If you have a non-trivial change, you may want to open an issue before spending
 much time coding, so we can discuss whether the change will be a good fit for
-oapitesthandler. But don't let that stop you from coding. Just be aware that
+gqltesthandler. But don't let that stop you from coding. Just be aware that
 while all changes are welcome, not all will be merged.
 
 ## Releasing
@@ -14,7 +14,7 @@ have a release label. See the release-train readme for more details.
 
 ## Scripts
 
-oapitesthandler uses a number of scripts to automate common tasks. They are found in the
+gqltesthandler uses a number of scripts to automate common tasks. They are found in the
 `script` directory.
 
 <!--- start script descriptions --->
@@ -36,13 +36,13 @@ script/fmt formats go code and shell scripts.
 script/generate runs all generators for this repo.
 `script/generate --check` checks that the generated files are up to date.
 
+### gqltesthandler
+
+script/gqltesthandler builds and runs the project with the given arguments.
+
 ### lint
 
 script/lint runs linters on the project.
-
-### oapitesthandler
-
-script/oapitesthandler builds and runs the project with the given arguments.
 
 ### release-hook
 

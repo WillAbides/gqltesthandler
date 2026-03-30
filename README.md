@@ -1,19 +1,19 @@
-# oapitesthandler
+# gqltesthandler
 
-A code generator that creates test handlers for testing HTTP clients generated
-by [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen). It generates mock HTTP servers that implement the
-oapi-codegen strict server interface, allowing you to set expectations on API calls in your tests.
+A code generator that creates mock GraphQL test handlers from a schema and predefined operations. It generates a typed
+Go test server that lets you set expectations on GraphQL operations and verify they are called correctly in your tests.
 
-The generated code has type-safe methods for setting expected requests and their corresponding responses. It validates
-that all expectations are met during test execution and that no unexpected requests are made.
+The generated code has type-safe methods for setting expected variables and their corresponding responses. It validates
+that all expectations are met during test execution and that no unexpected operations are made.
 
-[petstore_test.go](example/petstore/petstore_test.go) has several examples of how to use the generated handler.
+Designed for use with [genqlient](https://github.com/Khan/genqlient) (Khan Academy's typed GraphQL client generator),
+but works with any GraphQL client that sends standard `{"query", "operationName", "variables"}` POST requests.
 
-Set `go:generate` directives near where you are already generating your oapi-codegen client/server. For example:
+Set `go:generate` directives near where you are already generating your genqlient client. For example:
 
 ```
-//go:generate go tool oapi-codegen -config ./oapi-codegen.yaml ./openapi.yaml
-//go:generate go tool oapitesthandler --config=./oapi-codegen.yaml --out=internal/testhandler ./openapi.yaml
+//go:generate go run github.com/Khan/genqlient genqlient.yaml
+//go:generate go tool gqltesthandler --schema=./schema.graphqls --operations=./operations.graphql -o=internal/testhandler
 ```
 
 ## Installation
@@ -21,51 +21,50 @@ Set `go:generate` directives near where you are already generating your oapi-cod
 ### With `go install`
 
 ```shell
-go install github.com/willabides/oapitesthandler/cmd/oapitesthandler@latest
+go install github.com/willabides/gqltesthandler/cmd/gqltesthandler@latest
 ```
 
 ### With `go get -tool`
 
 ```shell
-go get -tool github.com/willabides/oapitesthandler/cmd/oapitesthandler
+go get -tool github.com/willabides/gqltesthandler/cmd/gqltesthandler
 ```
 
 ### With [bindown](https://github.com/WillAbides/bindown)
 
 ```shell
-bindown template-source add oapitesthandler https://github.com/WillAbides/oapitesthandler/releases/latest/download/bindown.yaml
-bindown dependency add oapitesthandler --source oapitesthandler -y
+bindown template-source add gqltesthandler https://github.com/WillAbides/gqltesthandler/releases/latest/download/bindown.yaml
+bindown dependency add gqltesthandler --source gqltesthandler -y
 ```
 
 ## Usage
 
-The generated TestHandler provides a type-safe way to mock API endpoints in your tests.
+The generated TestHandler provides a type-safe way to mock GraphQL operations in your tests.
 
 ### Basic Pattern
 
 ```go
 func TestMyService(t *testing.T) {
     // Create the test handler
-    handler := petstoretest.NewTestHandler(t)
+    handler := usertest.NewTestHandler(t)
     server := httptest.NewServer(handler)
     defer server.Close()
 
-    // Create your service that uses an oapi-codegen client
-    client, err := oapi.NewClientWithResponses(server.URL)
-    require.NoError(t, err)
-	
-    petstoreService := NewPetstoreService(client)
+    // Create your GraphQL client pointing at the mock server
+    client := graphql.NewClient(server.URL, http.DefaultClient)
 
     // Set expectations
-    handler.ExpectGetPetById(1).RespondJSON200(petstoretest.GetPetById200JSONResponse{
-        Id:   1,
-        Name: "Fluffy",
+    handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+        User: &usertest.GetUserResponseUser{
+            ID:   "1",
+            Name: "Alice",
+        },
     })
 
-    // Call your service - it hits the mock server
-    pet, err := petstoreService.GetPetByID(t.Context(), 1)
+    // Call your service — it hits the mock server
+    resp, err := GetUser(t.Context(), client, "1")
     require.NoError(t, err)
-    require.Equal(t, "Fluffy", pet.Name)
+    require.Equal(t, "Alice", resp.User.Name)
 
     // Test automatically verifies all expectations were met
 }
@@ -73,76 +72,78 @@ func TestMyService(t *testing.T) {
 
 ### Setting Expectations
 
-Each API operation gets an `Expect{OperationName}` method that returns a builder. Chain a `Respond` method to set the
-response:
+Each GraphQL operation gets an `Expect{OperationName}` method that returns a builder. Chain `Respond` or
+`RespondError` to set the response:
 
 ```go
-// Different response codes
-handler.ExpectGetPetById(1).RespondJSON200(successResponse)
-handler.ExpectGetPetById(999).RespondJSON404(notFoundResponse)
+// Successful response
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(successResponse)
 
-// Operations with request bodies
-handler.ExpectUpdatePet(updateRequest).RespondJSON200(updatedPet)
+// GraphQL error response
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "999"}).RespondError(
+    usertest.GraphQLError{Message: "user not found"},
+)
 
-// Operations with query parameters
-handler.ExpectFindPetsByStatus(queryParams).RespondJSON200(pets)
+// Mutations work the same way
+handler.ExpectCreateUser(usertest.CreateUserVariables{
+    Input: usertest.CreateUserInput{Name: "Bob", Email: "bob@example.com"},
+}).Respond(createResponse)
 ```
 
 ### Controlling Call Counts
 
-Use `Times()` to expect multiple calls with the same parameters:
+Use `Times()` to expect multiple calls with the same variables:
 
 ```go
 // Expect exactly 3 calls
-handler.ExpectGetPetById(1, petstoretest.Times(3)).RespondJSON200(response)
+handler.ExpectGetUser(vars, usertest.Times(3)).Respond(response)
 ```
 
 Use `MinTimes()` when you want at least N calls:
 
 ```go
 // Expect at least 2 calls, but allow more
-handler.ExpectGetPetById(1, petstoretest.MinTimes(2)).RespondJSON200(response)
+handler.ExpectGetUser(vars, usertest.MinTimes(2)).Respond(response)
 
-// MinTimes(0) acts as a stub - accepts any number of calls including zero
-handler.ExpectGetPetById(1, petstoretest.MinTimes(0)).RespondJSON200(response)
+// MinTimes(0) acts as a stub — accepts any number of calls including zero
+handler.ExpectGetUser(vars, usertest.MinTimes(0)).Respond(response)
 ```
 
 ### Custom Responses
 
-Use `Handle()` for responses that aren't described in your OpenAPI spec:
+Use `Handle()` for dynamic responses with full HTTP control:
 
 ```go
-handler.ExpectGetPetById(1).Handle(func(req petstoretest.GetPetByIdRequestObject, w http.ResponseWriter) {
-    w.Header().Set("X-Custom-Header", "value")
-    w.WriteHeader(200)
-    err := json.NewEncoder(w).Encode(map[string]any{
-        "id":   req.PetId,
-        "name": fmt.Sprintf("Pet-%d", req.PetId),
-    })
-    if err != nil {
-        t.Errorf("failed to write response: %v", err)
-    }
-})
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
+    func(vars usertest.GetUserVariables, w http.ResponseWriter) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]any{
+            "data": map[string]any{
+                "user": map[string]any{
+                    "id":   vars.ID,
+                    "name": "Dynamic-" + vars.ID,
+                },
+            },
+        })
+    },
+)
 ```
 
 ## CLI Usage
 
-<!--- everything between the next line and the "end usage output" comment is generated by script/generate-readme --->
 <!--- start usage output --->
 
 ```
-Usage: oapitesthandler --config=STRING --out=STRING <spec> [flags]
+Usage: gqltesthandler --schema=STRING --operations=STRING --out=STRING [flags]
 
-Arguments:
-  <spec>    Path to OpenAPI spec YAML file
+Generates mock GraphQL test handlers from a schema and predefined operations.
 
 Flags:
-  -h, --help             Show context-sensitive help.
-  -c, --config=STRING    Path to oapi-codegen config YAML file
-  -o, --out=STRING       Directory to write the generated test handler to
-      --models=STRING    Path to a package containing the OpenAPI models. If not specified, models
-                         will be generated into the output directory.
-      --version          Output the oapitesthandler version and exit.
+  -h, --help                 Show context-sensitive help.
+      --schema=STRING        Path to GraphQL schema file
+      --operations=STRING    Path to GraphQL operations file
+  -o, --out=STRING           Directory to write the generated test handler to
+      --version              Output the gqltesthandler version and exit.
 ```
 
 <!--- end usage output --->

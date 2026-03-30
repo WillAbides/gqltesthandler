@@ -21,10 +21,10 @@ $end_comment"
   echo "${data//$pattern/$replacement}" > "$file"
 }
 
-if [ -f script/oapitesthandler ]; then
+if [ -f script/gqltesthandler ]; then
   USAGE_OUTPUT="
 \`\`\`
-$(COLUMNS=100 script/oapitesthandler --help)
+$(COLUMNS=100 script/gqltesthandler --help)
 \`\`\`
 "
 fi
