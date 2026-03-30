@@ -168,33 +168,47 @@ type selectionField struct {
 
 func extractSelectionFields(schema *ast.Schema, selSet ast.SelectionSet, prefix string) []selectionField {
 	var fields []selectionField
-	for _, sel := range selSet {
-		field, ok := sel.(*ast.Field)
-		if !ok {
-			continue
-		}
-
-		typeDef := schema.Types[field.Definition.Type.Name()]
-		isObject := typeDef != nil && (typeDef.Kind == ast.Object || typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
-
-		sf := selectionField{
-			GraphQLName: field.Name,
-			GoName:      exportedName(field.Name),
-			JSONName:    field.Name,
-		}
-
-		if isObject && len(field.SelectionSet) > 0 {
-			nestedTypeName := prefix + exportedName(field.Name)
-			sf.TypeName = nestedTypeName
-			sf.NestedFields = extractSelectionFields(schema, field.SelectionSet, nestedTypeName)
-			sf.GoType = wrapGoType(field.Definition.Type, nestedTypeName)
-		} else {
-			sf.GoType = goTypeForGraphQL(schema, field.Definition.Type)
-		}
-
-		fields = append(fields, sf)
-	}
+	seen := map[string]bool{}
+	extractSelectionFieldsInto(schema, selSet, prefix, &fields, seen)
 	return fields
+}
+
+func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, prefix string, fields *[]selectionField, seen map[string]bool) {
+	for _, sel := range selSet {
+		switch sel := sel.(type) {
+		case *ast.Field:
+			if seen[sel.Name] {
+				continue
+			}
+			seen[sel.Name] = true
+
+			typeDef := schema.Types[sel.Definition.Type.Name()]
+			isObject := typeDef != nil && (typeDef.Kind == ast.Object || typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
+
+			sf := selectionField{
+				GraphQLName: sel.Name,
+				GoName:      exportedName(sel.Name),
+				JSONName:    sel.Name,
+			}
+
+			if isObject && len(sel.SelectionSet) > 0 {
+				nestedTypeName := prefix + exportedName(sel.Name)
+				sf.TypeName = nestedTypeName
+				sf.NestedFields = extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
+				sf.GoType = wrapGoType(sel.Definition.Type, nestedTypeName)
+			} else {
+				sf.GoType = goTypeForGraphQL(schema, sel.Definition.Type)
+			}
+
+			*fields = append(*fields, sf)
+		case *ast.FragmentSpread:
+			if sel.Definition != nil {
+				extractSelectionFieldsInto(schema, sel.Definition.SelectionSet, prefix, fields, seen)
+			}
+		case *ast.InlineFragment:
+			extractSelectionFieldsInto(schema, sel.SelectionSet, prefix, fields, seen)
+		}
+	}
 }
 
 // wrapGoType wraps a named type with pointer/slice based on the GraphQL type's nullability and list nesting.

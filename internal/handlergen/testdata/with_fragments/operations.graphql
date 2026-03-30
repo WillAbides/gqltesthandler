@@ -1,0 +1,41 @@
+query GetUser($id: ID!) {
+  user(id: $id) {
+    ...UserFields
+    posts(first: 10) {
+      nodes {
+        ...PostFields
+      }
+      pageInfo {
+        ...PageInfoFields
+      }
+    }
+  }
+}
+
+query GetNode($id: ID!) {
+  node(id: $id) {
+    ... on User {
+      ...UserFields
+    }
+    ... on Post {
+      ...PostFields
+    }
+  }
+}
+
+fragment UserFields on User {
+  id
+  name
+  email
+}
+
+fragment PostFields on Post {
+  id
+  title
+  body
+}
+
+fragment PageInfoFields on PageInfo {
+  endCursor
+  hasNextPage
+}

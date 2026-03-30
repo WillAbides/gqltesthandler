@@ -1,0 +1,92 @@
+query GetPullRequestReviews($owner: String!, $repo: String!, $pullNumber: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pullNumber) {
+      url
+      reviews(first: 100, after: $cursor) {
+        nodes {
+          url
+          fullDatabaseId
+          author {
+            url
+          }
+          body
+          state
+          createdAt
+          submittedAt
+          commit {
+            oid
+          }
+        }
+        pageInfo {
+          ...PageInfoFields
+        }
+      }
+    }
+  }
+}
+
+query GetPullRequestThreads($owner: String!, $repo: String!, $pullNumber: Int!, $threadsCursor: String, $commentsCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pullNumber) {
+      reviewThreads(first: 100, after: $threadsCursor) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          resolvedBy {
+            url
+          }
+          path
+          line
+          startLine
+          originalLine
+          originalStartLine
+          diffSide
+          startDiffSide
+          subjectType
+          ...ThreadCommentsFields
+        }
+        pageInfo {
+          ...PageInfoFields
+        }
+      }
+    }
+  }
+}
+
+query GetPullRequestThreadComments($threadID: ID!, $commentsCursor: String) {
+  node(id: $threadID) {
+    ...ThreadCommentsFields
+  }
+}
+
+fragment ThreadCommentsFields on PullRequestReviewThread {
+  comments(first: 100, after: $commentsCursor) {
+    nodes {
+      fullDatabaseId
+      author {
+        url
+      }
+      body
+      createdAt
+      diffHunk
+      commit {
+        oid
+      }
+      originalCommit {
+        oid
+      }
+      pullRequestReview {
+        fullDatabaseId
+      }
+    }
+    pageInfo {
+      ...PageInfoFields
+    }
+  }
+}
+
+fragment PageInfoFields on PageInfo {
+  endCursor
+  hasNextPage
+}

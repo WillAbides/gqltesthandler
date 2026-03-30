@@ -22,6 +22,10 @@ func TestRun(t *testing.T) {
 			name:        "with_mutations",
 			testdataDir: "testdata/with_mutations",
 		},
+		{
+			name:        "with_fragments",
+			testdataDir: "testdata/with_fragments",
+		},
 	}
 
 	for _, test := range tests {
