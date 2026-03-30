@@ -5,7 +5,17 @@ set -e
 
 CDPATH="" cd -- "$(dirname -- "$0")/.."
 
+REPO_ROOT="$(pwd -P)"
+BIN_DIR="$REPO_ROOT/bin"
+
 script/bindown -q install golangci-lint
 script/bindown -q install shellcheck
-bin/golangci-lint run ./...
+bin/golangci-lint run --config "$REPO_ROOT/.golangci.yaml" ./...
+
+for dir in example/*/; do
+  [ -f "$dir/go.mod" ] || continue
+  echo "linting $dir"
+  (cd "$dir" && "$BIN_DIR/golangci-lint" run --config "$REPO_ROOT/.golangci.yaml" ./...)
+done
+
 bin/shellcheck script/*

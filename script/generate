@@ -35,6 +35,12 @@ fi
 go generate ./...
 go mod tidy
 
+for dir in example/*/; do
+  [ -f "$dir/go.mod" ] || continue
+  echo "generating $dir"
+  (cd "$dir" && go generate ./... && go mod tidy)
+done
+
 if [ -f script/update-docs ]; then
   ./script/update-docs
 fi

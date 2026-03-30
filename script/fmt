@@ -11,4 +11,9 @@ git ls-files -o -c --exclude-standard '*.go' |
   bin/handcrafted |
   xargs bin/gofumpt -w -extra
 
+for dir in example/*/; do
+  [ -f "$dir/go.mod" ] || continue
+  find "$dir" -name '*.go' -not -path '*/vendor/*' -exec bin/gofumpt -w -extra {} +
+done
+
 bin/shfmt -ci -i 2 -ci -sr -w -s ./script

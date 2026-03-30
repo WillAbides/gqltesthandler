@@ -6,3 +6,9 @@ set -e
 CDPATH="" cd -- "$(dirname -- "$0")/.."
 
 go test -race -covermode=atomic ./...
+
+for dir in example/*/; do
+  [ -f "$dir/go.mod" ] || continue
+  echo "testing $dir"
+  (cd "$dir" && go test -race -covermode=atomic ./...)
+done
