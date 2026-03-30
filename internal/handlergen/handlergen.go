@@ -53,7 +53,7 @@ func Run(schemaPath, operationsPath, outputPath string) error {
 
 	packageName := detectPackageName(outputPath)
 
-	err = os.MkdirAll(outputPath, 0o755)
+	err = os.MkdirAll(outputPath, 0o750)
 	if err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}

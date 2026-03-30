@@ -9,11 +9,13 @@ that all expectations are met during test execution and that no unexpected opera
 Designed for use with [genqlient](https://github.com/Khan/genqlient) (Khan Academy's typed GraphQL client generator),
 but works with any GraphQL client that sends standard `{"query", "operationName", "variables"}` POST requests.
 
+[userapi_test.go](example/userapi/userapi_test.go) has several examples of how to use the generated handler.
+
 Set `go:generate` directives near where you are already generating your genqlient client. For example:
 
 ```
 //go:generate go run github.com/Khan/genqlient genqlient.yaml
-//go:generate go tool gqltesthandler --schema=./schema.graphqls --operations=./operations.graphql -o=internal/testhandler
+//go:generate go tool gqltesthandler --schema=schema.graphqls --operations=operations.graphql -o internal/testhandler
 ```
 
 ## Installation

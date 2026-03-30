@@ -15,7 +15,7 @@ dependencies:
   golangci-lint:
     template: origin#golangci-lint
     vars:
-      version: 2.8.0
+      version: 2.11.4
   goreleaser:
     template: origin#goreleaser
     vars:
@@ -312,10 +312,10 @@ url_checksums:
   https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_macOS_amd64.zip: eb8f57371aeccc06f847992bb69e4e84f83b13e080708dd55239f6f8fc14300c
   https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_macOS_arm64.zip: 0c2524c2b002fda89f8b766c7d3dd8e6ac1de183556728a83182c6137f19643d
   https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_windows_amd64.zip: 3a52a68a95d007d0c97f3a0a27f7302872eb31010e69312d20c59e90e0ba1e9f
-  https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-darwin-amd64.tar.gz: 164c72806d0e31ab19da4f08fff748a3fdc57e241851279b666c945ed9b91830
-  https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-darwin-arm64.tar.gz: 6f8979a83117e0607d4b85ff486382ef0404440bbf54f0e6f003ceab6ccf641e
-  https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-linux-amd64.tar.gz: 7048bc6b25c9515ed092c83f9fa8709ca97937ead52d9ff317a143299ee97a50
-  https://github.com/golangci/golangci-lint/releases/download/v2.8.0/golangci-lint-2.8.0-windows-amd64.zip: 22428168a9406f79853bf9a198b66e88ded9faa57cf85e5d225361f457f33513
+  https://github.com/golangci/golangci-lint/releases/download/v2.11.4/golangci-lint-2.11.4-darwin-amd64.tar.gz: c900d4048db75d1edfd550fd11cf6a9b3008e7caa8e119fcddbc700412d63e60
+  https://github.com/golangci/golangci-lint/releases/download/v2.11.4/golangci-lint-2.11.4-darwin-arm64.tar.gz: 02db2a2dae8b26812e53b0688a6f617e3ef1f489790e829ea22862cf76945675
+  https://github.com/golangci/golangci-lint/releases/download/v2.11.4/golangci-lint-2.11.4-linux-amd64.tar.gz: 200c5b7503f67b59a6743ccf32133026c174e272b930ee79aa2aa6f37aca7ef1
+  https://github.com/golangci/golangci-lint/releases/download/v2.11.4/golangci-lint-2.11.4-windows-amd64.zip: 4932cfca5e75bf60fe1c576edf459e5e809e6644664a068185d64b84af3fad9e
   https://github.com/goreleaser/goreleaser/releases/download/v2.7.0/goreleaser_Darwin_arm64.tar.gz: 0d7c9e3cbbbd23298cddb02518b42e942fee7e152bb46cbc40722e856f2c9c0d
   https://github.com/goreleaser/goreleaser/releases/download/v2.7.0/goreleaser_Darwin_x86_64.tar.gz: 0f8c8aa5d13032dcda05bbbb0d09a48eb6b80015e5cb7a23d6dfa3fc44c81d66
   https://github.com/goreleaser/goreleaser/releases/download/v2.7.0/goreleaser_Linux_x86_64.tar.gz: 075cb78e414664e50ee6900dd93ff1748c2d3fce19c9830f40186e99fc90ba0e
