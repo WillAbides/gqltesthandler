@@ -88,8 +88,7 @@ func (r getUserRawResult) writeGetUserResult(w http.ResponseWriter, vars GetUser
 }
 
 // GetUserExpectation is a builder for setting the response of a GetUser
-// expectation or default. Use ExpectGetUser or DefaultGetUser on
-// TestHandler to obtain one.
+// expectation or default.
 type GetUserExpectation struct {
 	handler   *TestHandler
 	vars      GetUserVariables
@@ -105,24 +104,18 @@ func (b *GetUserExpectation) register(resp getUserResult) {
 	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
-// Respond sets the response data. For an ExpectGetUser builder this
-// registers a concrete expectation; for a DefaultGetUser builder this
-// replaces the per-operation default.
+// Respond sets the expectation to return the given data.
 func (b *GetUserExpectation) Respond(data GetUserResponse) {
 	b.register(getUserDataResult{data: data})
 }
 
-// RespondError sets the response to return GraphQL errors. For an
-// ExpectGetUser builder this registers a concrete expectation; for a
-// DefaultGetUser builder this replaces the per-operation default.
+// RespondError sets the expectation to return GraphQL errors.
 func (b *GetUserExpectation) RespondError(errors ...GraphQLError) {
 	b.register(getUserErrorResult{errors: errors})
 }
 
 // Handle sets the response to invoke a custom handler function. The function
-// receives the variables from the incoming request, which match the variables
-// registered with ExpectGetUser for a concrete expectation, or any
-// variables for a default.
+// receives the variables from the incoming request.
 func (b *GetUserExpectation) Handle(fn func(GetUserVariables, http.ResponseWriter)) {
 	b.register(getUserRawResult{fn: fn})
 }
@@ -136,11 +129,10 @@ func (s *TestHandler) ExpectGetUser(vars GetUserVariables, opts ...ExpectOption)
 	}
 }
 
-// DefaultGetUser returns a builder for setting the default response for the
-// GetUser operation. The default is used only when no ExpectGetUser
-// expectation matches an incoming request. Defaults are infinitely callable
-// and never fail at cleanup. Calling DefaultGetUser replaces any previously
-// registered default.
+// DefaultGetUser returns a builder for the default GetUser responder,
+// used when no ExpectGetUser matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
 func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	return &GetUserExpectation{
 		handler:   s,
@@ -148,13 +140,10 @@ func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	}
 }
 
-// ResetGetUser wipes all registered expectations and the default for the
-// GetUser operation, and clears any pending cleanup errors. ResetGetUser
-// records an error via tb.Errorf and leaves state untouched if the handler
-// has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup. The served-check and the
-// clear are performed atomically — no request can mark the handler served
-// while a ResetGetUser is in progress.
+// ResetGetUser wipes the registered expectations and the default for the
+// GetUser operation and disarms their cleanup errors. If the handler has
+// already served any request (checked handler-wide, not per-operation),
+// ResetGetUser records an error via tb.Errorf and leaves state untouched.
 func (s *TestHandler) ResetGetUser() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,8 +185,7 @@ func (r getNodeRawResult) writeGetNodeResult(w http.ResponseWriter, vars GetNode
 }
 
 // GetNodeExpectation is a builder for setting the response of a GetNode
-// expectation or default. Use ExpectGetNode or DefaultGetNode on
-// TestHandler to obtain one.
+// expectation or default.
 type GetNodeExpectation struct {
 	handler   *TestHandler
 	vars      GetNodeVariables
@@ -213,24 +201,18 @@ func (b *GetNodeExpectation) register(resp getNodeResult) {
 	b.handler.getNodeExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
-// Respond sets the response data. For an ExpectGetNode builder this
-// registers a concrete expectation; for a DefaultGetNode builder this
-// replaces the per-operation default.
+// Respond sets the expectation to return the given data.
 func (b *GetNodeExpectation) Respond(data GetNodeResponse) {
 	b.register(getNodeDataResult{data: data})
 }
 
-// RespondError sets the response to return GraphQL errors. For an
-// ExpectGetNode builder this registers a concrete expectation; for a
-// DefaultGetNode builder this replaces the per-operation default.
+// RespondError sets the expectation to return GraphQL errors.
 func (b *GetNodeExpectation) RespondError(errors ...GraphQLError) {
 	b.register(getNodeErrorResult{errors: errors})
 }
 
 // Handle sets the response to invoke a custom handler function. The function
-// receives the variables from the incoming request, which match the variables
-// registered with ExpectGetNode for a concrete expectation, or any
-// variables for a default.
+// receives the variables from the incoming request.
 func (b *GetNodeExpectation) Handle(fn func(GetNodeVariables, http.ResponseWriter)) {
 	b.register(getNodeRawResult{fn: fn})
 }
@@ -244,11 +226,10 @@ func (s *TestHandler) ExpectGetNode(vars GetNodeVariables, opts ...ExpectOption)
 	}
 }
 
-// DefaultGetNode returns a builder for setting the default response for the
-// GetNode operation. The default is used only when no ExpectGetNode
-// expectation matches an incoming request. Defaults are infinitely callable
-// and never fail at cleanup. Calling DefaultGetNode replaces any previously
-// registered default.
+// DefaultGetNode returns a builder for the default GetNode responder,
+// used when no ExpectGetNode matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
 func (s *TestHandler) DefaultGetNode() *GetNodeExpectation {
 	return &GetNodeExpectation{
 		handler:   s,
@@ -256,13 +237,10 @@ func (s *TestHandler) DefaultGetNode() *GetNodeExpectation {
 	}
 }
 
-// ResetGetNode wipes all registered expectations and the default for the
-// GetNode operation, and clears any pending cleanup errors. ResetGetNode
-// records an error via tb.Errorf and leaves state untouched if the handler
-// has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup. The served-check and the
-// clear are performed atomically — no request can mark the handler served
-// while a ResetGetNode is in progress.
+// ResetGetNode wipes the registered expectations and the default for the
+// GetNode operation and disarms their cleanup errors. If the handler has
+// already served any request (checked handler-wide, not per-operation),
+// ResetGetNode records an error via tb.Errorf and leaves state untouched.
 func (s *TestHandler) ResetGetNode() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

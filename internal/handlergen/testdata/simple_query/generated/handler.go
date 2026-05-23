@@ -88,8 +88,7 @@ func (r getUserRawResult) writeGetUserResult(w http.ResponseWriter, vars GetUser
 }
 
 // GetUserExpectation is a builder for setting the response of a GetUser
-// expectation or default. Use ExpectGetUser or DefaultGetUser on
-// TestHandler to obtain one.
+// expectation or default.
 type GetUserExpectation struct {
 	handler   *TestHandler
 	vars      GetUserVariables
@@ -105,24 +104,18 @@ func (b *GetUserExpectation) register(resp getUserResult) {
 	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
-// Respond sets the response data. For an ExpectGetUser builder this
-// registers a concrete expectation; for a DefaultGetUser builder this
-// replaces the per-operation default.
+// Respond sets the expectation to return the given data.
 func (b *GetUserExpectation) Respond(data GetUserResponse) {
 	b.register(getUserDataResult{data: data})
 }
 
-// RespondError sets the response to return GraphQL errors. For an
-// ExpectGetUser builder this registers a concrete expectation; for a
-// DefaultGetUser builder this replaces the per-operation default.
+// RespondError sets the expectation to return GraphQL errors.
 func (b *GetUserExpectation) RespondError(errors ...GraphQLError) {
 	b.register(getUserErrorResult{errors: errors})
 }
 
 // Handle sets the response to invoke a custom handler function. The function
-// receives the variables from the incoming request, which match the variables
-// registered with ExpectGetUser for a concrete expectation, or any
-// variables for a default.
+// receives the variables from the incoming request.
 func (b *GetUserExpectation) Handle(fn func(GetUserVariables, http.ResponseWriter)) {
 	b.register(getUserRawResult{fn: fn})
 }
@@ -136,11 +129,10 @@ func (s *TestHandler) ExpectGetUser(vars GetUserVariables, opts ...ExpectOption)
 	}
 }
 
-// DefaultGetUser returns a builder for setting the default response for the
-// GetUser operation. The default is used only when no ExpectGetUser
-// expectation matches an incoming request. Defaults are infinitely callable
-// and never fail at cleanup. Calling DefaultGetUser replaces any previously
-// registered default.
+// DefaultGetUser returns a builder for the default GetUser responder,
+// used when no ExpectGetUser matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
 func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	return &GetUserExpectation{
 		handler:   s,
@@ -148,13 +140,10 @@ func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	}
 }
 
-// ResetGetUser wipes all registered expectations and the default for the
-// GetUser operation, and clears any pending cleanup errors. ResetGetUser
-// records an error via tb.Errorf and leaves state untouched if the handler
-// has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup. The served-check and the
-// clear are performed atomically — no request can mark the handler served
-// while a ResetGetUser is in progress.
+// ResetGetUser wipes the registered expectations and the default for the
+// GetUser operation and disarms their cleanup errors. If the handler has
+// already served any request (checked handler-wide, not per-operation),
+// ResetGetUser records an error via tb.Errorf and leaves state untouched.
 func (s *TestHandler) ResetGetUser() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,8 +185,7 @@ func (r listUsersRawResult) writeListUsersResult(w http.ResponseWriter, vars Lis
 }
 
 // ListUsersExpectation is a builder for setting the response of a ListUsers
-// expectation or default. Use ExpectListUsers or DefaultListUsers on
-// TestHandler to obtain one.
+// expectation or default.
 type ListUsersExpectation struct {
 	handler   *TestHandler
 	vars      ListUsersVariables
@@ -213,24 +201,18 @@ func (b *ListUsersExpectation) register(resp listUsersResult) {
 	b.handler.listUsersExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
-// Respond sets the response data. For an ExpectListUsers builder this
-// registers a concrete expectation; for a DefaultListUsers builder this
-// replaces the per-operation default.
+// Respond sets the expectation to return the given data.
 func (b *ListUsersExpectation) Respond(data ListUsersResponse) {
 	b.register(listUsersDataResult{data: data})
 }
 
-// RespondError sets the response to return GraphQL errors. For an
-// ExpectListUsers builder this registers a concrete expectation; for a
-// DefaultListUsers builder this replaces the per-operation default.
+// RespondError sets the expectation to return GraphQL errors.
 func (b *ListUsersExpectation) RespondError(errors ...GraphQLError) {
 	b.register(listUsersErrorResult{errors: errors})
 }
 
 // Handle sets the response to invoke a custom handler function. The function
-// receives the variables from the incoming request, which match the variables
-// registered with ExpectListUsers for a concrete expectation, or any
-// variables for a default.
+// receives the variables from the incoming request.
 func (b *ListUsersExpectation) Handle(fn func(ListUsersVariables, http.ResponseWriter)) {
 	b.register(listUsersRawResult{fn: fn})
 }
@@ -244,11 +226,10 @@ func (s *TestHandler) ExpectListUsers(vars ListUsersVariables, opts ...ExpectOpt
 	}
 }
 
-// DefaultListUsers returns a builder for setting the default response for the
-// ListUsers operation. The default is used only when no ExpectListUsers
-// expectation matches an incoming request. Defaults are infinitely callable
-// and never fail at cleanup. Calling DefaultListUsers replaces any previously
-// registered default.
+// DefaultListUsers returns a builder for the default ListUsers responder,
+// used when no ExpectListUsers matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
 func (s *TestHandler) DefaultListUsers() *ListUsersExpectation {
 	return &ListUsersExpectation{
 		handler:   s,
@@ -256,13 +237,10 @@ func (s *TestHandler) DefaultListUsers() *ListUsersExpectation {
 	}
 }
 
-// ResetListUsers wipes all registered expectations and the default for the
-// ListUsers operation, and clears any pending cleanup errors. ResetListUsers
-// records an error via tb.Errorf and leaves state untouched if the handler
-// has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup. The served-check and the
-// clear are performed atomically — no request can mark the handler served
-// while a ResetListUsers is in progress.
+// ResetListUsers wipes the registered expectations and the default for the
+// ListUsers operation and disarms their cleanup errors. If the handler has
+// already served any request (checked handler-wide, not per-operation),
+// ResetListUsers records an error via tb.Errorf and leaves state untouched.
 func (s *TestHandler) ResetListUsers() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

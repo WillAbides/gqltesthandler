@@ -90,8 +90,7 @@ func (r {{.LowercaseName}}RawResult) write{{.Name}}Result(w http.ResponseWriter,
 }
 
 // {{.BuilderTypeName}} is a builder for setting the response of a {{.Name}}
-// expectation or default. Use Expect{{.Name}} or Default{{.Name}} on
-// TestHandler to obtain one.
+// expectation or default.
 type {{.BuilderTypeName}} struct {
 	handler   *TestHandler
 	vars      {{.VariablesType}}
@@ -107,24 +106,18 @@ func (b *{{.BuilderTypeName}}) register(resp {{.ResultInterface}}) {
 	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
-// Respond sets the response data. For an Expect{{.Name}} builder this
-// registers a concrete expectation; for a Default{{.Name}} builder this
-// replaces the per-operation default.
+// Respond sets the expectation to return the given data.
 func (b *{{.BuilderTypeName}}) Respond(data {{.ResponseType}}) {
 	b.register({{.LowercaseName}}DataResult{data: data})
 }
 
-// RespondError sets the response to return GraphQL errors. For an
-// Expect{{.Name}} builder this registers a concrete expectation; for a
-// Default{{.Name}} builder this replaces the per-operation default.
+// RespondError sets the expectation to return GraphQL errors.
 func (b *{{.BuilderTypeName}}) RespondError(errors ...GraphQLError) {
 	b.register({{.LowercaseName}}ErrorResult{errors: errors})
 }
 
 // Handle sets the response to invoke a custom handler function. The function
-// receives the variables from the incoming request, which match the variables
-// registered with Expect{{.Name}} for a concrete expectation, or any
-// variables for a default.
+// receives the variables from the incoming request.
 func (b *{{.BuilderTypeName}}) Handle(fn func({{.VariablesType}}, http.ResponseWriter)) {
 	b.register({{.LowercaseName}}RawResult{fn: fn})
 }
@@ -138,11 +131,10 @@ func (s *TestHandler) Expect{{.Name}}(vars {{.VariablesType}}, opts ...ExpectOpt
 	}
 }
 
-// Default{{.Name}} returns a builder for setting the default response for the
-// {{.Name}} operation. The default is used only when no Expect{{.Name}}
-// expectation matches an incoming request. Defaults are infinitely callable
-// and never fail at cleanup. Calling Default{{.Name}} replaces any previously
-// registered default.
+// Default{{.Name}} returns a builder for the default {{.Name}} responder,
+// used when no Expect{{.Name}} matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
 func (s *TestHandler) Default{{.Name}}() *{{.BuilderTypeName}} {
 	return &{{.BuilderTypeName}}{
 		handler:   s,
@@ -150,13 +142,10 @@ func (s *TestHandler) Default{{.Name}}() *{{.BuilderTypeName}} {
 	}
 }
 
-// Reset{{.Name}} wipes all registered expectations and the default for the
-// {{.Name}} operation, and clears any pending cleanup errors. Reset{{.Name}}
-// records an error via tb.Errorf and leaves state untouched if the handler
-// has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup. The served-check and the
-// clear are performed atomically — no request can mark the handler served
-// while a Reset{{.Name}} is in progress.
+// Reset{{.Name}} wipes the registered expectations and the default for the
+// {{.Name}} operation and disarms their cleanup errors. If the handler has
+// already served any request (checked handler-wide, not per-operation),
+// Reset{{.Name}} records an error via tb.Errorf and leaves state untouched.
 func (s *TestHandler) Reset{{.Name}}() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
