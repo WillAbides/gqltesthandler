@@ -31,6 +31,8 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.handler.markServed()
+
 	switch req.OperationName {
 	case "GetPullRequestReviews":
 		var vars GetPullRequestReviewsVariables
@@ -46,7 +48,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetPullRequestReviewsResult(w)
+		_ = resp.writeGetPullRequestReviewsResult(w, vars)
 	case "GetPullRequestThreads":
 		var vars GetPullRequestThreadsVariables
 		if len(req.Variables) > 0 {
@@ -61,7 +63,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetPullRequestThreadsResult(w)
+		_ = resp.writeGetPullRequestThreadsResult(w, vars)
 	case "GetPullRequestThreadComments":
 		var vars GetPullRequestThreadCommentsVariables
 		if len(req.Variables) > 0 {
@@ -76,7 +78,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetPullRequestThreadCommentsResult(w)
+		_ = resp.writeGetPullRequestThreadCommentsResult(w, vars)
 	default:
 		writeGraphQLErrors(w, []GraphQLError{{Message: "unknown operation: " + req.OperationName}})
 	}

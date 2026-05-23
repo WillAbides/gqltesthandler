@@ -131,6 +131,47 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
 )
 ```
 
+### Per-Operation Defaults
+
+Each operation also gets a `Default{OperationName}()` method for registering a
+fallback response. Defaults match only when no concrete `Expect*` expectation
+matches the incoming request. They are infinitely callable and never fail at
+cleanup.
+
+```go
+// Static default
+handler.DefaultGetUser().Respond(usertest.GetUserResponse{
+    User: &usertest.GetUserResponseUser{Name: "stub"},
+})
+
+// Dynamic default — Handle on a Default builder receives the actual variables
+// from the incoming request, which is great for stateful test fakes.
+handler.DefaultGetUser().Handle(func(vars usertest.GetUserVariables, w http.ResponseWriter) {
+    // look up vars.ID in your in-memory store, write a response, etc.
+})
+```
+
+A concrete `Expect*` always wins over the default. Calling `Default<OpName>` a
+second time replaces the previous default. Defaults accept no
+`ExpectOption` — `Times`/`MinTimes` are meaningless for an infinitely callable
+fallback.
+
+### Resetting Expectations
+
+`handler.Reset<OperationName>()` wipes registered expectations and the default
+for one operation. `handler.Reset()` wipes everything across all operations.
+Both also clear any pending cleanup errors so previously-registered `Times(N)`
+expectations do not fire `t.Errorf` after a reset.
+
+```go
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "stale"}).Respond(usertest.GetUserResponse{})
+handler.ResetGetUser() // wipes the above without failing the test
+```
+
+Both `Reset()` and `Reset<OpName>()` record an error via `t.Errorf` and leave
+state untouched if the handler has already served any request. They are safe
+to use only during test setup, before any client calls have been made.
+
 ## CLI Usage
 
 <!--- start usage output --->

@@ -31,6 +31,8 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.handler.markServed()
+
 	switch req.OperationName {
 	case "GetUser":
 		var vars GetUserVariables
@@ -46,7 +48,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetUserResult(w)
+		_ = resp.writeGetUserResult(w, vars)
 	case "ListUsers":
 		var vars ListUsersVariables
 		if len(req.Variables) > 0 {
@@ -61,7 +63,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeListUsersResult(w)
+		_ = resp.writeListUsersResult(w, vars)
 	case "CreateUser":
 		var vars CreateUserVariables
 		if len(req.Variables) > 0 {
@@ -76,7 +78,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeCreateUserResult(w)
+		_ = resp.writeCreateUserResult(w, vars)
 	case "UpdateUser":
 		var vars UpdateUserVariables
 		if len(req.Variables) > 0 {
@@ -91,7 +93,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeUpdateUserResult(w)
+		_ = resp.writeUpdateUserResult(w, vars)
 	case "DeleteUser":
 		var vars DeleteUserVariables
 		if len(req.Variables) > 0 {
@@ -106,7 +108,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeDeleteUserResult(w)
+		_ = resp.writeDeleteUserResult(w, vars)
 	default:
 		writeGraphQLErrors(w, []GraphQLError{{Message: "unknown operation: " + req.OperationName}})
 	}

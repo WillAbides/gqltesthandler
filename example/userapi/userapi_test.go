@@ -1,6 +1,7 @@
 package userapi_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -97,4 +98,66 @@ func TestGetUser_MultipleCalls(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "Alice", resp.User.Name)
 	}
+}
+
+func TestGetUser_Default(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	// Concrete expectation for ID "1" takes precedence over the default.
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "Alice"},
+	})
+
+	// Default handler responds to any other ID using the variables from the
+	// incoming request.
+	handler.DefaultGetUser().Handle(func(vars usertest.GetUserVariables, w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"user": map[string]any{
+					"id":    vars.ID,
+					"name":  "user-" + vars.ID,
+					"email": "user-" + vars.ID + "@example.com",
+				},
+			},
+		}))
+	})
+
+	resp1, err := client.GetUser(t.Context(), "1")
+	require.NoError(t, err)
+	require.Equal(t, "Alice", resp1.User.Name)
+
+	resp2, err := client.GetUser(t.Context(), "42")
+	require.NoError(t, err)
+	require.Equal(t, "user-42", resp2.User.Name)
+
+	// Default is sticky — call it again with another unknown id.
+	resp3, err := client.GetUser(t.Context(), "99")
+	require.NoError(t, err)
+	require.Equal(t, "user-99", resp3.User.Name)
+}
+
+func TestReset_BeforeRequests(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	// Register an expectation that would otherwise fail at cleanup, then
+	// wipe it before any request is served.
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "stale"}).Respond(usertest.GetUserResponse{})
+	handler.ResetGetUser()
+
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "Alice"},
+	})
+
+	resp, err := client.GetUser(t.Context(), "1")
+	require.NoError(t, err)
+	require.Equal(t, "Alice", resp.User.Name)
 }

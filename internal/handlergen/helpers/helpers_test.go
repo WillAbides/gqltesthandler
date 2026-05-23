@@ -512,3 +512,209 @@ func TestExpectations(t *testing.T) {
 		})
 	})
 }
+
+func TestDefaultResponse(t *testing.T) {
+	t.Run("default matches when no concrete expectation matches", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 42, Name: "anything"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default ignores raw request body", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, strings.NewReader("totally different body"))
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete wins over default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "concrete", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete order does not matter for default precedence", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"})
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "concrete", got.Message)
+
+		// Subsequent unrelated request hits the default.
+		got2, err := exp.getResponse(tb, testRequest{ID: 99}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got2.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default is unlimited", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		for i := range 100 {
+			got, err := exp.getResponse(tb, testRequest{ID: i}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "default", got.Message)
+		}
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default with zero calls is fine", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("setDefault replaces the previous default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "first"})
+		exp.setDefault(testResponse{Status: 200, Message: "second"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete expectations still consume normally with default present", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"}, Times(2))
+
+		// Two concrete consumptions.
+		for i := range 2 {
+			got, err := exp.getResponse(tb, req, nil)
+			require.NoError(t, err, "call %d", i+1)
+			assert.Equal(t, "concrete", got.Message)
+		}
+
+		// Third call falls back to default.
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+}
+
+func TestClear(t *testing.T) {
+	t.Run("clear removes expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Status: 200, Message: "ok"})
+
+		exp.clear()
+
+		_, err := exp.getResponse(tb, req, nil)
+		assert.Error(t, err, "expected no expectation after clear")
+	})
+
+	t.Run("clear disarms cleanup errors for unmet expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{}, Times(5))
+
+		exp.clear()
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("clear removes default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		exp.clear()
+
+		_, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		assert.Error(t, err, "expected no default after clear")
+	})
+
+	t.Run("expectations registered after clear still work", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.expect(tb, testRequest{ID: 1}, nil, testResponse{Message: "first"})
+		exp.clear()
+
+		req := testRequest{ID: 2}
+		exp.expect(tb, req, nil, testResponse{Message: "second"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default registered after clear still works", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Message: "first"})
+		exp.clear()
+		exp.setDefault(testResponse{Message: "second"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+}

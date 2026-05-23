@@ -4,6 +4,7 @@ package ghtest
 
 import (
 	"net/http"
+	"sync"
 )
 
 // TestHandler is a mock GraphQL HTTP handler for testing.
@@ -11,6 +12,9 @@ import (
 type TestHandler struct {
 	tb      TB
 	handler http.Handler
+
+	mu     sync.Mutex
+	served bool
 
 	getPullRequestReviewsExpectResponses        expectResponses[GetPullRequestReviewsVariables, getPullRequestReviewsResult]
 	getPullRequestThreadsExpectResponses        expectResponses[GetPullRequestThreadsVariables, getPullRequestThreadsResult]
@@ -28,16 +32,45 @@ func NewTestHandler(tb TB) *TestHandler {
 	return th
 }
 
+// markServed records that the handler has processed a request. Once true,
+// Reset and Reset<OpName> refuse to wipe state.
+func (s *TestHandler) markServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.served = true
+}
+
+// hasServed reports whether the handler has processed any request.
+func (s *TestHandler) hasServed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.served
+}
+
+// Reset wipes all registered expectations and defaults on this handler and
+// clears any pending cleanup errors so previously-unmet expectations will not
+// fail the test. If the handler has already served at least one request, Reset
+// records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) Reset() {
+	if s.hasServed() {
+		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
+		return
+	}
+	s.getPullRequestReviewsExpectResponses.clear()
+	s.getPullRequestThreadsExpectResponses.clear()
+	s.getPullRequestThreadCommentsExpectResponses.clear()
+}
+
 // getPullRequestReviewsResult is the result interface for the GetPullRequestReviews operation.
 type getPullRequestReviewsResult interface {
-	writeGetPullRequestReviewsResult(w http.ResponseWriter) error
+	writeGetPullRequestReviewsResult(w http.ResponseWriter, vars GetPullRequestReviewsVariables) error
 }
 
 type getPullRequestReviewsDataResult struct {
 	data GetPullRequestReviewsResponse
 }
 
-func (r getPullRequestReviewsDataResult) writeGetPullRequestReviewsResult(w http.ResponseWriter) error {
+func (r getPullRequestReviewsDataResult) writeGetPullRequestReviewsResult(w http.ResponseWriter, _ GetPullRequestReviewsVariables) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -45,17 +78,16 @@ type getPullRequestReviewsErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r getPullRequestReviewsErrorResult) writeGetPullRequestReviewsResult(w http.ResponseWriter) error {
+func (r getPullRequestReviewsErrorResult) writeGetPullRequestReviewsResult(w http.ResponseWriter, _ GetPullRequestReviewsVariables) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type getPullRequestReviewsRawResult struct {
-	vars GetPullRequestReviewsVariables
-	fn   func(GetPullRequestReviewsVariables, http.ResponseWriter)
+	fn func(GetPullRequestReviewsVariables, http.ResponseWriter)
 }
 
-func (r getPullRequestReviewsRawResult) writeGetPullRequestReviewsResult(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r getPullRequestReviewsRawResult) writeGetPullRequestReviewsResult(w http.ResponseWriter, vars GetPullRequestReviewsVariables) error {
+	r.fn(vars, w)
 	return nil
 }
 
@@ -76,9 +108,10 @@ func (b *GetPullRequestReviewsExpectation) RespondError(errors ...GraphQLError) 
 	b.handler.getPullRequestReviewsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestReviewsErrorResult{errors: errors}, b.opts...)
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the expectation to invoke a custom handler function. The
+// function receives the variables registered with ExpectGetPullRequestReviews.
 func (b *GetPullRequestReviewsExpectation) Handle(fn func(GetPullRequestReviewsVariables, http.ResponseWriter)) {
-	b.handler.getPullRequestReviewsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestReviewsRawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.handler.getPullRequestReviewsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestReviewsRawResult{fn: fn}, b.opts...)
 }
 
 // ExpectGetPullRequestReviews sets up an expectation for the GetPullRequestReviews operation.
@@ -90,16 +123,61 @@ func (s *TestHandler) ExpectGetPullRequestReviews(vars GetPullRequestReviewsVari
 	}
 }
 
+// GetPullRequestReviewsDefault is a builder for setting the default response of a
+// GetPullRequestReviews operation. Defaults are used when no ExpectGetPullRequestReviews expectation
+// matches an incoming request.
+type GetPullRequestReviewsDefault struct {
+	handler *TestHandler
+}
+
+// Respond sets the default response data for GetPullRequestReviews.
+func (b *GetPullRequestReviewsDefault) Respond(data GetPullRequestReviewsResponse) {
+	b.handler.getPullRequestReviewsExpectResponses.setDefault(getPullRequestReviewsDataResult{data: data})
+}
+
+// RespondError sets the default response to return GraphQL errors for GetPullRequestReviews.
+func (b *GetPullRequestReviewsDefault) RespondError(errors ...GraphQLError) {
+	b.handler.getPullRequestReviewsExpectResponses.setDefault(getPullRequestReviewsErrorResult{errors: errors})
+}
+
+// Handle sets the default response to invoke a custom handler function for
+// GetPullRequestReviews. The function receives the actual variables from the incoming
+// request.
+func (b *GetPullRequestReviewsDefault) Handle(fn func(GetPullRequestReviewsVariables, http.ResponseWriter)) {
+	b.handler.getPullRequestReviewsExpectResponses.setDefault(getPullRequestReviewsRawResult{fn: fn})
+}
+
+// DefaultGetPullRequestReviews returns a builder for setting the default response for the
+// GetPullRequestReviews operation. The default is matched only when no ExpectGetPullRequestReviews
+// expectation matches an incoming request. Defaults are infinitely callable
+// and never fail at cleanup. Calling DefaultGetPullRequestReviews replaces any previously
+// registered default.
+func (s *TestHandler) DefaultGetPullRequestReviews() *GetPullRequestReviewsDefault {
+	return &GetPullRequestReviewsDefault{handler: s}
+}
+
+// ResetGetPullRequestReviews wipes all registered expectations and the default for the
+// GetPullRequestReviews operation, and clears any pending cleanup errors. If the handler
+// has already served at least one request, ResetGetPullRequestReviews records an error via
+// tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetPullRequestReviews() {
+	if s.hasServed() {
+		s.tb.Errorf("TestHandler.ResetGetPullRequestReviews called after handler has served at least one request")
+		return
+	}
+	s.getPullRequestReviewsExpectResponses.clear()
+}
+
 // getPullRequestThreadsResult is the result interface for the GetPullRequestThreads operation.
 type getPullRequestThreadsResult interface {
-	writeGetPullRequestThreadsResult(w http.ResponseWriter) error
+	writeGetPullRequestThreadsResult(w http.ResponseWriter, vars GetPullRequestThreadsVariables) error
 }
 
 type getPullRequestThreadsDataResult struct {
 	data GetPullRequestThreadsResponse
 }
 
-func (r getPullRequestThreadsDataResult) writeGetPullRequestThreadsResult(w http.ResponseWriter) error {
+func (r getPullRequestThreadsDataResult) writeGetPullRequestThreadsResult(w http.ResponseWriter, _ GetPullRequestThreadsVariables) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -107,17 +185,16 @@ type getPullRequestThreadsErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r getPullRequestThreadsErrorResult) writeGetPullRequestThreadsResult(w http.ResponseWriter) error {
+func (r getPullRequestThreadsErrorResult) writeGetPullRequestThreadsResult(w http.ResponseWriter, _ GetPullRequestThreadsVariables) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type getPullRequestThreadsRawResult struct {
-	vars GetPullRequestThreadsVariables
-	fn   func(GetPullRequestThreadsVariables, http.ResponseWriter)
+	fn func(GetPullRequestThreadsVariables, http.ResponseWriter)
 }
 
-func (r getPullRequestThreadsRawResult) writeGetPullRequestThreadsResult(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r getPullRequestThreadsRawResult) writeGetPullRequestThreadsResult(w http.ResponseWriter, vars GetPullRequestThreadsVariables) error {
+	r.fn(vars, w)
 	return nil
 }
 
@@ -138,9 +215,10 @@ func (b *GetPullRequestThreadsExpectation) RespondError(errors ...GraphQLError) 
 	b.handler.getPullRequestThreadsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadsErrorResult{errors: errors}, b.opts...)
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the expectation to invoke a custom handler function. The
+// function receives the variables registered with ExpectGetPullRequestThreads.
 func (b *GetPullRequestThreadsExpectation) Handle(fn func(GetPullRequestThreadsVariables, http.ResponseWriter)) {
-	b.handler.getPullRequestThreadsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadsRawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.handler.getPullRequestThreadsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadsRawResult{fn: fn}, b.opts...)
 }
 
 // ExpectGetPullRequestThreads sets up an expectation for the GetPullRequestThreads operation.
@@ -152,16 +230,61 @@ func (s *TestHandler) ExpectGetPullRequestThreads(vars GetPullRequestThreadsVari
 	}
 }
 
+// GetPullRequestThreadsDefault is a builder for setting the default response of a
+// GetPullRequestThreads operation. Defaults are used when no ExpectGetPullRequestThreads expectation
+// matches an incoming request.
+type GetPullRequestThreadsDefault struct {
+	handler *TestHandler
+}
+
+// Respond sets the default response data for GetPullRequestThreads.
+func (b *GetPullRequestThreadsDefault) Respond(data GetPullRequestThreadsResponse) {
+	b.handler.getPullRequestThreadsExpectResponses.setDefault(getPullRequestThreadsDataResult{data: data})
+}
+
+// RespondError sets the default response to return GraphQL errors for GetPullRequestThreads.
+func (b *GetPullRequestThreadsDefault) RespondError(errors ...GraphQLError) {
+	b.handler.getPullRequestThreadsExpectResponses.setDefault(getPullRequestThreadsErrorResult{errors: errors})
+}
+
+// Handle sets the default response to invoke a custom handler function for
+// GetPullRequestThreads. The function receives the actual variables from the incoming
+// request.
+func (b *GetPullRequestThreadsDefault) Handle(fn func(GetPullRequestThreadsVariables, http.ResponseWriter)) {
+	b.handler.getPullRequestThreadsExpectResponses.setDefault(getPullRequestThreadsRawResult{fn: fn})
+}
+
+// DefaultGetPullRequestThreads returns a builder for setting the default response for the
+// GetPullRequestThreads operation. The default is matched only when no ExpectGetPullRequestThreads
+// expectation matches an incoming request. Defaults are infinitely callable
+// and never fail at cleanup. Calling DefaultGetPullRequestThreads replaces any previously
+// registered default.
+func (s *TestHandler) DefaultGetPullRequestThreads() *GetPullRequestThreadsDefault {
+	return &GetPullRequestThreadsDefault{handler: s}
+}
+
+// ResetGetPullRequestThreads wipes all registered expectations and the default for the
+// GetPullRequestThreads operation, and clears any pending cleanup errors. If the handler
+// has already served at least one request, ResetGetPullRequestThreads records an error via
+// tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetPullRequestThreads() {
+	if s.hasServed() {
+		s.tb.Errorf("TestHandler.ResetGetPullRequestThreads called after handler has served at least one request")
+		return
+	}
+	s.getPullRequestThreadsExpectResponses.clear()
+}
+
 // getPullRequestThreadCommentsResult is the result interface for the GetPullRequestThreadComments operation.
 type getPullRequestThreadCommentsResult interface {
-	writeGetPullRequestThreadCommentsResult(w http.ResponseWriter) error
+	writeGetPullRequestThreadCommentsResult(w http.ResponseWriter, vars GetPullRequestThreadCommentsVariables) error
 }
 
 type getPullRequestThreadCommentsDataResult struct {
 	data GetPullRequestThreadCommentsResponse
 }
 
-func (r getPullRequestThreadCommentsDataResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter) error {
+func (r getPullRequestThreadCommentsDataResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter, _ GetPullRequestThreadCommentsVariables) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -169,17 +292,16 @@ type getPullRequestThreadCommentsErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r getPullRequestThreadCommentsErrorResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter) error {
+func (r getPullRequestThreadCommentsErrorResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter, _ GetPullRequestThreadCommentsVariables) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type getPullRequestThreadCommentsRawResult struct {
-	vars GetPullRequestThreadCommentsVariables
-	fn   func(GetPullRequestThreadCommentsVariables, http.ResponseWriter)
+	fn func(GetPullRequestThreadCommentsVariables, http.ResponseWriter)
 }
 
-func (r getPullRequestThreadCommentsRawResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r getPullRequestThreadCommentsRawResult) writeGetPullRequestThreadCommentsResult(w http.ResponseWriter, vars GetPullRequestThreadCommentsVariables) error {
+	r.fn(vars, w)
 	return nil
 }
 
@@ -200,9 +322,10 @@ func (b *GetPullRequestThreadCommentsExpectation) RespondError(errors ...GraphQL
 	b.handler.getPullRequestThreadCommentsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadCommentsErrorResult{errors: errors}, b.opts...)
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the expectation to invoke a custom handler function. The
+// function receives the variables registered with ExpectGetPullRequestThreadComments.
 func (b *GetPullRequestThreadCommentsExpectation) Handle(fn func(GetPullRequestThreadCommentsVariables, http.ResponseWriter)) {
-	b.handler.getPullRequestThreadCommentsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadCommentsRawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.handler.getPullRequestThreadCommentsExpectResponses.expect(b.handler.tb, b.vars, nil, getPullRequestThreadCommentsRawResult{fn: fn}, b.opts...)
 }
 
 // ExpectGetPullRequestThreadComments sets up an expectation for the GetPullRequestThreadComments operation.
@@ -212,4 +335,49 @@ func (s *TestHandler) ExpectGetPullRequestThreadComments(vars GetPullRequestThre
 		vars:    vars,
 		opts:    opts,
 	}
+}
+
+// GetPullRequestThreadCommentsDefault is a builder for setting the default response of a
+// GetPullRequestThreadComments operation. Defaults are used when no ExpectGetPullRequestThreadComments expectation
+// matches an incoming request.
+type GetPullRequestThreadCommentsDefault struct {
+	handler *TestHandler
+}
+
+// Respond sets the default response data for GetPullRequestThreadComments.
+func (b *GetPullRequestThreadCommentsDefault) Respond(data GetPullRequestThreadCommentsResponse) {
+	b.handler.getPullRequestThreadCommentsExpectResponses.setDefault(getPullRequestThreadCommentsDataResult{data: data})
+}
+
+// RespondError sets the default response to return GraphQL errors for GetPullRequestThreadComments.
+func (b *GetPullRequestThreadCommentsDefault) RespondError(errors ...GraphQLError) {
+	b.handler.getPullRequestThreadCommentsExpectResponses.setDefault(getPullRequestThreadCommentsErrorResult{errors: errors})
+}
+
+// Handle sets the default response to invoke a custom handler function for
+// GetPullRequestThreadComments. The function receives the actual variables from the incoming
+// request.
+func (b *GetPullRequestThreadCommentsDefault) Handle(fn func(GetPullRequestThreadCommentsVariables, http.ResponseWriter)) {
+	b.handler.getPullRequestThreadCommentsExpectResponses.setDefault(getPullRequestThreadCommentsRawResult{fn: fn})
+}
+
+// DefaultGetPullRequestThreadComments returns a builder for setting the default response for the
+// GetPullRequestThreadComments operation. The default is matched only when no ExpectGetPullRequestThreadComments
+// expectation matches an incoming request. Defaults are infinitely callable
+// and never fail at cleanup. Calling DefaultGetPullRequestThreadComments replaces any previously
+// registered default.
+func (s *TestHandler) DefaultGetPullRequestThreadComments() *GetPullRequestThreadCommentsDefault {
+	return &GetPullRequestThreadCommentsDefault{handler: s}
+}
+
+// ResetGetPullRequestThreadComments wipes all registered expectations and the default for the
+// GetPullRequestThreadComments operation, and clears any pending cleanup errors. If the handler
+// has already served at least one request, ResetGetPullRequestThreadComments records an error via
+// tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetPullRequestThreadComments() {
+	if s.hasServed() {
+		s.tb.Errorf("TestHandler.ResetGetPullRequestThreadComments called after handler has served at least one request")
+		return
+	}
+	s.getPullRequestThreadCommentsExpectResponses.clear()
 }

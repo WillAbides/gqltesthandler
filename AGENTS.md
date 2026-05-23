@@ -110,8 +110,12 @@ For each GraphQL operation, the generator creates:
 2. A `{OperationName}Response` struct shaped by the selection set (with nested structs for object fields)
 3. An `expectResponses` field in TestHandler (e.g., `getUserExpectResponses`)
 4. An `Expect{OperationName}` method on TestHandler that accepts a variables struct and returns a `{OperationName}Expectation` builder
-5. Builder methods: `Respond(data)`, `RespondError(errors...)`, `Handle(fn)`
-6. A case in testServer's `ServeHTTP` switch that unmarshals variables and calls `getResponse()`
+5. Builder methods on the expectation: `Respond(data)`, `RespondError(errors...)`, `Handle(fn)`
+6. A `Default{OperationName}` method that returns a `{OperationName}Default` builder for the per-operation default responder
+7. A `Reset{OperationName}` method that wipes expectations and the default for that operation
+8. A case in testServer's `ServeHTTP` switch that unmarshals variables and calls `getResponse()`
+
+In addition, TestHandler has a top-level `Reset()` method that wipes all operations at once.
 
 The generator uses a **fluent builder API pattern** where Expect methods return a builder, and you chain a response method:
 
@@ -155,6 +159,38 @@ handler.ExpectGetUser(vars, usertest.Times(3)).Respond(response)
 handler.ExpectGetUser(vars, usertest.MinTimes(0)).Respond(response)
 ```
 
+### Default Responders
+
+Each operation gets a `Default{OperationName}` method that returns a builder for registering a fallback response. Defaults match only when no concrete `Expect*` expectation matches the incoming request. They are infinitely callable, never tracked in counts, and never fail at cleanup.
+
+```go
+// Static default
+handler.DefaultGetUser().Respond(usertest.GetUserResponse{
+    User: &usertest.GetUserResponseUser{Name: "stub"},
+})
+
+// Dynamic default — receives the actual variables from the incoming request
+handler.DefaultGetUser().Handle(func(vars usertest.GetUserVariables, w http.ResponseWriter) {
+    // build a response based on vars.ID, etc.
+})
+
+// Default error
+handler.DefaultGetUser().RespondError(usertest.GraphQLError{Message: "not found"})
+```
+
+A concrete `Expect*` always wins over the default, regardless of registration order. Calling `Default<OpName>` a second time replaces the previously registered default. Defaults accept no `ExpectOption` — Times/MinTimes are meaningless for an infinitely callable fallback.
+
+### Reset Methods
+
+- `handler.Reset{OperationName}()` wipes registered expectations and the default for one operation.
+- `handler.Reset()` wipes everything across all operations.
+
+Both clear pending cleanup-error state so previously-registered `Times(N)` expectations do not fire `t.Errorf` at cleanup after a reset.
+
+**Fail-on-used rule:** Both `Reset()` and `Reset<OpName>()` record an error via `tb.Errorf` and leave state untouched if the handler has served any request — not just requests matching the operation being reset. This conservative rule avoids invalidating in-flight assertions or response state.
+
+Adding new expectations or defaults via `Expect*` / `Default*` after requests have flowed remains legal. Only *removal* (Reset) triggers the fail-on-used guard.
+
 ### Type Mapping
 
 GraphQL types are mapped to Go types as follows:
@@ -191,9 +227,11 @@ Tests use httptest.NewServer with the TestHandler:
 - **Response shaped by selection set**: Generated response types only include fields that the operation actually selects, matching what a real GraphQL server would return
 - **Nested response structs**: Object fields in selections generate nested structs (e.g., `GetUserResponseUser`) rather than reusing schema-level types, ensuring response shapes match the operation
 - **Options placement**: Options like `Times()` are passed to the Expect method, not the Respond method, for cleaner syntax: `ExpectGetUser(vars, Times(3)).Respond(...)`
-- **Custom handlers via Handle() method**: Each builder generates a `Handle()` method that accepts `func(VariablesType, http.ResponseWriter)`, providing full control over HTTP responses
+- **Custom handlers via Handle() method**: Each builder generates a `Handle()` method that accepts `func(VariablesType, http.ResponseWriter)`, providing full control over HTTP responses. On `Expect*` builders the function receives the originally-registered variables; on `Default*` builders it receives the actual variables from the incoming request.
 - **GraphQL error support**: `RespondError()` returns standard GraphQL error responses with message, path, and extensions fields
-- **FIFO expectation matching**: First matching expectation with remaining times is used
+- **FIFO expectation matching**: First matching concrete expectation with remaining times is used; the per-operation default is consulted only when no concrete match exists
+- **Per-operation defaults**: `Default<OpName>` registers a fallback responder that never consumes count and never errors at cleanup. Calling it again replaces the previous default.
+- **Reset semantics**: `Reset()` and `Reset<OpName>()` wipe expectations + default and disarm pending cleanup errors. They become no-ops (with `tb.Errorf`) once the handler has served any request, so they're safe to use only during test setup.
 - **Expectation tracking**: Each expectation tracks remaining invocations via `times` counter
 - **Automatic verification**: Cleanup functions verify all expectations were fully consumed
 - **Embedded helpers**: The helpers package is embedded into generated code (with package name replaced) so generated packages have zero runtime dependencies beyond the standard library

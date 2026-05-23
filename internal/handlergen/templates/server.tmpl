@@ -29,6 +29,8 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.handler.markServed()
+
 	switch req.OperationName {
 {{- range .Operations}}
 	case "{{.Name}}":
@@ -45,7 +47,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{`{{`}}Message: getErr.Error(){{"}}"}})
 			return
 		}
-		_ = resp.write{{.Name}}Result(w)
+		_ = resp.write{{.Name}}Result(w, vars)
 {{- end}}
 	default:
 		writeGraphQLErrors(w, []GraphQLError{{`{{`}}Message: "unknown operation: " + req.OperationName{{"}}"}})

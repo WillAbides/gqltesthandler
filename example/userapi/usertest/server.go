@@ -31,6 +31,8 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.handler.markServed()
+
 	switch req.OperationName {
 	case "GetUser":
 		var vars GetUserVariables
@@ -46,7 +48,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetUserResult(w)
+		_ = resp.writeGetUserResult(w, vars)
 	case "CreateUser":
 		var vars CreateUserVariables
 		if len(req.Variables) > 0 {
@@ -61,7 +63,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeCreateUserResult(w)
+		_ = resp.writeCreateUserResult(w, vars)
 	default:
 		writeGraphQLErrors(w, []GraphQLError{{Message: "unknown operation: " + req.OperationName}})
 	}
