@@ -131,6 +131,22 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
 )
 ```
 
+### Unmatched Operations
+
+The handler is **strict by default**: if a client sends an operation and
+neither a concrete `Expect<OpName>` expectation nor a `Default<OpName>`
+matches it, the handler calls `t.Errorf("no expectation found ...")` and
+returns a GraphQL error response. This surfaces test-configuration mistakes
+(typos in operation names, missed setup, drift between client and fixtures)
+loudly instead of silently returning empty data.
+
+To opt out of strictness for a given operation — e.g. when building a
+stateful fake that wraps the generated handler and feeds responses from a
+seeded in-memory store — register a `Default<OpName>` for it at handler
+construction. A `Default<OpName>().Respond(emptyResponse)` is enough to
+turn the strict error into a graceful empty payload for that one operation,
+while leaving every other operation strict.
+
 ### Per-Operation Defaults
 
 Each operation also gets a `Default{OperationName}()` method for registering a
