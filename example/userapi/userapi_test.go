@@ -2,6 +2,7 @@ package userapi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -160,4 +161,39 @@ func TestReset_BeforeRequests(t *testing.T) {
 	resp, err := client.GetUser(t.Context(), "1")
 	require.NoError(t, err)
 	require.Equal(t, "Alice", resp.User.Name)
+}
+
+func TestReset_AfterServedRecordsError(t *testing.T) {
+	tb := &recordingTB{t: t}
+	handler := usertest.NewTestHandler(tb)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "Alice"},
+	})
+
+	_, err := client.GetUser(t.Context(), "1")
+	require.NoError(t, err)
+
+	// After the handler has served a request, Reset and ResetGetUser must
+	// record an error and leave state untouched.
+	handler.ResetGetUser()
+	handler.Reset()
+
+	require.Len(t, tb.errors, 2)
+	require.Contains(t, tb.errors[0], "ResetGetUser called after handler has served")
+	require.Contains(t, tb.errors[1], "Reset called after handler has served")
+}
+
+type recordingTB struct {
+	t      *testing.T
+	errors []string
+}
+
+func (r *recordingTB) Cleanup(f func()) { r.t.Cleanup(f) }
+func (r *recordingTB) Errorf(format string, args ...any) {
+	r.errors = append(r.errors, fmt.Sprintf(format, args...))
 }
