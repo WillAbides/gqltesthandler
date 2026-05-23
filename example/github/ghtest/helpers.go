@@ -155,6 +155,17 @@ func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody i
 
 	var zeroResp RESP
 
+	// Fast path: no expectations to match against. Skip body read and
+	// hashing entirely — go straight to the default (if any) or report
+	// missing expectation.
+	if len(e.expectations) == 0 {
+		if e.defaultResp != nil {
+			return *e.defaultResp, nil
+		}
+		t.Errorf("no expectation found for request %+v", req)
+		return zeroResp, fmt.Errorf("no expectation found for request")
+	}
+
 	bodyBytes, err := func() ([]byte, error) {
 		if rawRequestBody == nil {
 			return nil, nil

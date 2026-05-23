@@ -19,6 +19,8 @@ type graphqlRequest struct {
 }
 
 func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.handler.markServed()
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -30,8 +32,6 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeGraphQLErrors(w, []GraphQLError{{Message: "failed to decode request: " + err.Error()}})
 		return
 	}
-
-	s.handler.markServed()
 
 	switch req.OperationName {
 	case "GetUser":

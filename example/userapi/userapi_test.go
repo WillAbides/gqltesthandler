@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -186,6 +187,24 @@ func TestReset_AfterServedRecordsError(t *testing.T) {
 	require.Len(t, tb.errors, 2)
 	require.Contains(t, tb.errors[0], "ResetGetUser called after handler has served")
 	require.Contains(t, tb.errors[1], "Reset called after handler has served")
+}
+
+func TestReset_AfterMalformedRequestRecordsError(t *testing.T) {
+	tb := &recordingTB{t: t}
+	handler := usertest.NewTestHandler(tb)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// A request that fails JSON decode (or method validation) must still
+	// flip the served flag so a subsequent Reset is correctly rejected.
+	resp, err := http.Post(server.URL, "application/json", strings.NewReader("not json"))
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	handler.Reset()
+
+	require.Len(t, tb.errors, 1)
+	require.Contains(t, tb.errors[0], "Reset called after handler has served")
 }
 
 type recordingTB struct {

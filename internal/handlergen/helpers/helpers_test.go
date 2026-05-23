@@ -29,6 +29,19 @@ type testResponse struct {
 	Message string
 }
 
+// errReader is an io.Reader that records when it is read and always returns
+// the configured error. Used by tests that need to prove a code path did not
+// touch the body.
+type errReader struct {
+	err  error
+	read bool
+}
+
+func (r *errReader) Read(p []byte) (int, error) {
+	r.read = true
+	return 0, r.err
+}
+
 func TestKeyHash(t *testing.T) {
 	t.Run("same request produces same hash", func(t *testing.T) {
 		req1 := testRequest{
@@ -642,6 +655,36 @@ func TestDefaultResponse(t *testing.T) {
 
 		tb.RunCleanups()
 		tb.AssertNoErrors()
+	})
+
+	t.Run("fast path skips body read when only the default is registered", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		// A reader that would error if anyone actually read from it.
+		body := &errReader{err: io.ErrUnexpectedEOF}
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, body)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+		assert.False(t, body.read, "expected body to be left unread on default fast path")
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("fast path errors without reading body when no default and no expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		body := &errReader{err: io.ErrUnexpectedEOF}
+
+		_, err := exp.getResponse(tb, testRequest{ID: 1}, body)
+		assert.Error(t, err)
+		assert.False(t, body.read, "expected body to be left unread on empty fast path")
+		tb.AssertErrors()
 	})
 }
 
