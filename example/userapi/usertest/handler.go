@@ -48,8 +48,10 @@ func (s *TestHandler) hasServed() bool {
 
 // Reset wipes all registered expectations and defaults on this handler and
 // clears any pending cleanup errors so previously-unmet expectations will not
-// fail the test. If the handler has already served at least one request, Reset
-// records an error via tb.Errorf and leaves state untouched.
+// fail the test. Reset records an error via tb.Errorf and leaves state
+// untouched if the handler has already served any request (checked
+// handler-wide, not per-operation), so it is safe to call only during test
+// setup.
 func (s *TestHandler) Reset() {
 	if s.hasServed() {
 		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
@@ -89,27 +91,44 @@ func (r getUserRawResult) writeGetUserResult(w http.ResponseWriter, vars GetUser
 	return nil
 }
 
-// GetUserExpectation is a builder for setting the response of a GetUser expectation.
+// GetUserExpectation is a builder for setting the response of a GetUser
+// expectation or default. Use ExpectGetUser or DefaultGetUser on
+// TestHandler to obtain one.
 type GetUserExpectation struct {
-	handler *TestHandler
-	vars    GetUserVariables
-	opts    []ExpectOption
+	handler   *TestHandler
+	vars      GetUserVariables
+	opts      []ExpectOption
+	isDefault bool
 }
 
-// Respond sets the expectation to return the given data.
+func (b *GetUserExpectation) register(resp getUserResult) {
+	if b.isDefault {
+		b.handler.getUserExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the response data. For an ExpectGetUser builder this
+// registers a concrete expectation; for a DefaultGetUser builder this
+// replaces the per-operation default.
 func (b *GetUserExpectation) Respond(data GetUserResponse) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserDataResult{data: data}, b.opts...)
+	b.register(getUserDataResult{data: data})
 }
 
-// RespondError sets the expectation to return GraphQL errors.
+// RespondError sets the response to return GraphQL errors. For an
+// ExpectGetUser builder this registers a concrete expectation; for a
+// DefaultGetUser builder this replaces the per-operation default.
 func (b *GetUserExpectation) RespondError(errors ...GraphQLError) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserErrorResult{errors: errors}, b.opts...)
+	b.register(getUserErrorResult{errors: errors})
 }
 
-// Handle sets the expectation to invoke a custom handler function. The
-// function receives the variables registered with ExpectGetUser.
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request, which match the variables
+// registered with ExpectGetUser for a concrete expectation, or any
+// variables for a default.
 func (b *GetUserExpectation) Handle(fn func(GetUserVariables, http.ResponseWriter)) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserRawResult{fn: fn}, b.opts...)
+	b.register(getUserRawResult{fn: fn})
 }
 
 // ExpectGetUser sets up an expectation for the GetUser operation.
@@ -121,43 +140,23 @@ func (s *TestHandler) ExpectGetUser(vars GetUserVariables, opts ...ExpectOption)
 	}
 }
 
-// GetUserDefault is a builder for setting the default response of a
-// GetUser operation. Defaults are used when no ExpectGetUser expectation
-// matches an incoming request.
-type GetUserDefault struct {
-	handler *TestHandler
-}
-
-// Respond sets the default response data for GetUser.
-func (b *GetUserDefault) Respond(data GetUserResponse) {
-	b.handler.getUserExpectResponses.setDefault(getUserDataResult{data: data})
-}
-
-// RespondError sets the default response to return GraphQL errors for GetUser.
-func (b *GetUserDefault) RespondError(errors ...GraphQLError) {
-	b.handler.getUserExpectResponses.setDefault(getUserErrorResult{errors: errors})
-}
-
-// Handle sets the default response to invoke a custom handler function for
-// GetUser. The function receives the actual variables from the incoming
-// request.
-func (b *GetUserDefault) Handle(fn func(GetUserVariables, http.ResponseWriter)) {
-	b.handler.getUserExpectResponses.setDefault(getUserRawResult{fn: fn})
-}
-
 // DefaultGetUser returns a builder for setting the default response for the
-// GetUser operation. The default is matched only when no ExpectGetUser
+// GetUser operation. The default is used only when no ExpectGetUser
 // expectation matches an incoming request. Defaults are infinitely callable
 // and never fail at cleanup. Calling DefaultGetUser replaces any previously
 // registered default.
-func (s *TestHandler) DefaultGetUser() *GetUserDefault {
-	return &GetUserDefault{handler: s}
+func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
+	return &GetUserExpectation{
+		handler:   s,
+		isDefault: true,
+	}
 }
 
 // ResetGetUser wipes all registered expectations and the default for the
-// GetUser operation, and clears any pending cleanup errors. If the handler
-// has already served at least one request, ResetGetUser records an error via
-// tb.Errorf and leaves state untouched.
+// GetUser operation, and clears any pending cleanup errors. ResetGetUser
+// records an error via tb.Errorf and leaves state untouched if the handler
+// has already served any request (checked handler-wide, not per-operation),
+// so it is safe to call only during test setup.
 func (s *TestHandler) ResetGetUser() {
 	if s.hasServed() {
 		s.tb.Errorf("TestHandler.ResetGetUser called after handler has served at least one request")
@@ -196,27 +195,44 @@ func (r createUserRawResult) writeCreateUserResult(w http.ResponseWriter, vars C
 	return nil
 }
 
-// CreateUserExpectation is a builder for setting the response of a CreateUser expectation.
+// CreateUserExpectation is a builder for setting the response of a CreateUser
+// expectation or default. Use ExpectCreateUser or DefaultCreateUser on
+// TestHandler to obtain one.
 type CreateUserExpectation struct {
-	handler *TestHandler
-	vars    CreateUserVariables
-	opts    []ExpectOption
+	handler   *TestHandler
+	vars      CreateUserVariables
+	opts      []ExpectOption
+	isDefault bool
 }
 
-// Respond sets the expectation to return the given data.
+func (b *CreateUserExpectation) register(resp createUserResult) {
+	if b.isDefault {
+		b.handler.createUserExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the response data. For an ExpectCreateUser builder this
+// registers a concrete expectation; for a DefaultCreateUser builder this
+// replaces the per-operation default.
 func (b *CreateUserExpectation) Respond(data CreateUserResponse) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserDataResult{data: data}, b.opts...)
+	b.register(createUserDataResult{data: data})
 }
 
-// RespondError sets the expectation to return GraphQL errors.
+// RespondError sets the response to return GraphQL errors. For an
+// ExpectCreateUser builder this registers a concrete expectation; for a
+// DefaultCreateUser builder this replaces the per-operation default.
 func (b *CreateUserExpectation) RespondError(errors ...GraphQLError) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserErrorResult{errors: errors}, b.opts...)
+	b.register(createUserErrorResult{errors: errors})
 }
 
-// Handle sets the expectation to invoke a custom handler function. The
-// function receives the variables registered with ExpectCreateUser.
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request, which match the variables
+// registered with ExpectCreateUser for a concrete expectation, or any
+// variables for a default.
 func (b *CreateUserExpectation) Handle(fn func(CreateUserVariables, http.ResponseWriter)) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserRawResult{fn: fn}, b.opts...)
+	b.register(createUserRawResult{fn: fn})
 }
 
 // ExpectCreateUser sets up an expectation for the CreateUser operation.
@@ -228,43 +244,23 @@ func (s *TestHandler) ExpectCreateUser(vars CreateUserVariables, opts ...ExpectO
 	}
 }
 
-// CreateUserDefault is a builder for setting the default response of a
-// CreateUser operation. Defaults are used when no ExpectCreateUser expectation
-// matches an incoming request.
-type CreateUserDefault struct {
-	handler *TestHandler
-}
-
-// Respond sets the default response data for CreateUser.
-func (b *CreateUserDefault) Respond(data CreateUserResponse) {
-	b.handler.createUserExpectResponses.setDefault(createUserDataResult{data: data})
-}
-
-// RespondError sets the default response to return GraphQL errors for CreateUser.
-func (b *CreateUserDefault) RespondError(errors ...GraphQLError) {
-	b.handler.createUserExpectResponses.setDefault(createUserErrorResult{errors: errors})
-}
-
-// Handle sets the default response to invoke a custom handler function for
-// CreateUser. The function receives the actual variables from the incoming
-// request.
-func (b *CreateUserDefault) Handle(fn func(CreateUserVariables, http.ResponseWriter)) {
-	b.handler.createUserExpectResponses.setDefault(createUserRawResult{fn: fn})
-}
-
 // DefaultCreateUser returns a builder for setting the default response for the
-// CreateUser operation. The default is matched only when no ExpectCreateUser
+// CreateUser operation. The default is used only when no ExpectCreateUser
 // expectation matches an incoming request. Defaults are infinitely callable
 // and never fail at cleanup. Calling DefaultCreateUser replaces any previously
 // registered default.
-func (s *TestHandler) DefaultCreateUser() *CreateUserDefault {
-	return &CreateUserDefault{handler: s}
+func (s *TestHandler) DefaultCreateUser() *CreateUserExpectation {
+	return &CreateUserExpectation{
+		handler:   s,
+		isDefault: true,
+	}
 }
 
 // ResetCreateUser wipes all registered expectations and the default for the
-// CreateUser operation, and clears any pending cleanup errors. If the handler
-// has already served at least one request, ResetCreateUser records an error via
-// tb.Errorf and leaves state untouched.
+// CreateUser operation, and clears any pending cleanup errors. ResetCreateUser
+// records an error via tb.Errorf and leaves state untouched if the handler
+// has already served any request (checked handler-wide, not per-operation),
+// so it is safe to call only during test setup.
 func (s *TestHandler) ResetCreateUser() {
 	if s.hasServed() {
 		s.tb.Errorf("TestHandler.ResetCreateUser called after handler has served at least one request")

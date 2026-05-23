@@ -80,8 +80,7 @@ type expectResponse[REQ, RESP any] struct {
 
 type expectResponses[REQ, RESP any] struct {
 	expectations []*expectResponse[REQ, RESP]
-	defaultResp  RESP
-	hasDefault   bool
+	defaultResp  *RESP
 	lock         sync.Mutex
 }
 
@@ -134,8 +133,7 @@ func (e *expectResponses[REQ, RESP]) setDefault(resp RESP) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	e.defaultResp = resp
-	e.hasDefault = true
+	e.defaultResp = &resp
 }
 
 // clear removes all registered expectations, the default response, and
@@ -148,9 +146,7 @@ func (e *expectResponses[REQ, RESP]) clear() {
 		ex.times = 0
 	}
 	e.expectations = nil
-	var zero RESP
-	e.defaultResp = zero
-	e.hasDefault = false
+	e.defaultResp = nil
 }
 
 func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody io.Reader) (RESP, error) {
@@ -181,8 +177,8 @@ func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody i
 		return ex.response, nil
 	}
 
-	if e.hasDefault {
-		return e.defaultResp, nil
+	if e.defaultResp != nil {
+		return *e.defaultResp, nil
 	}
 
 	t.Errorf("no expectation found for request %+v", req)
