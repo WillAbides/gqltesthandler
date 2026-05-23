@@ -116,7 +116,7 @@ For each GraphQL operation, the generator creates:
 4. An `Expect{OperationName}` method on TestHandler that accepts a variables struct and returns a `{OperationName}Expectation` builder
 5. Builder methods on the expectation: `Respond(data)`, `RespondError(errors...)`, `Handle(fn)`
 6. A `Default{OperationName}` method that returns the same `{OperationName}Expectation` builder (with an internal `isDefault` flag) for the per-operation default responder. The builder routes `Respond` / `RespondError` / `Handle` to the default slot instead of registering an expectation.
-7. A `Reset{OperationName}` method that wipes expectations and the default for that operation
+7. A variadic `Reset{OperationName}(vars ...{OperationName}Variables)` method. Zero args wipes all expectations and the default; non-zero args wipe only matching expectations and leave the default + non-matches alone.
 8. A case in testServer's `ServeHTTP` switch that unmarshals variables and calls `getResponse()`
 
 In addition, TestHandler has a top-level `Reset()` method that wipes all operations at once.
@@ -186,12 +186,14 @@ A concrete `Expect*` always wins over the default, regardless of registration or
 
 ### Reset Methods
 
-- `handler.Reset{OperationName}()` wipes registered expectations and the default for one operation.
+- `handler.Reset{OperationName}(vars ...{OperationName}Variables)` is variadic. With no arguments it wipes registered expectations and the default for one operation. With one or more `vars` it wipes only the registered expectations whose key matches one of the provided variables, leaves the default and non-matching expectations untouched, and treats a `vars` entry that matches nothing as a silent no-op. Matching uses the same key hash as expectation dispatch.
 - `handler.Reset()` wipes everything across all operations.
 
-Both clear pending cleanup-error state so previously-registered `Times(N)` expectations do not fire `t.Errorf` at cleanup after a reset.
+Both clear pending cleanup-error state for the wiped expectations so previously-registered `Times(N)` expectations do not fire `t.Errorf` at cleanup after a reset.
 
-**Fail-on-used rule:** Both `Reset()` and `Reset<OpName>()` record an error via `tb.Errorf` and leave state untouched if the handler has served any request — not just requests matching the operation being reset. This conservative rule avoids invalidating in-flight assertions or response state.
+The variadic targeted form supports layered fixture patterns — one layer pre-registers `MinTimes(0)` stubs derived from seed data, a downstream layer calls `Reset<Op>(vars)` to drop a single fixture cell and then re-registers a stricter assertion for that key without disturbing other entries or the default.
+
+**Fail-on-used rule:** Both `Reset()` and `Reset<OpName>()` (with or without args) record an error via `tb.Errorf` and leave state untouched if the handler has served any request — not just requests matching the operation being reset. This conservative rule avoids invalidating in-flight assertions or response state.
 
 Adding new expectations or defaults via `Expect*` / `Default*` after requests have flowed remains legal. Only *removal* (Reset) triggers the fail-on-used guard.
 
@@ -236,7 +238,7 @@ Tests use httptest.NewServer with the TestHandler:
 - **FIFO expectation matching**: First matching concrete expectation with remaining times is used; the per-operation default is consulted only when no concrete match exists
 - **Strict-by-default unmatched-operation handling**: If a request hits the handler and neither an `Expect*` nor a `Default*` is registered for the operation, the server calls `t.Errorf("no expectation found ...")` and returns a GraphQL error response. This is deliberate — it surfaces test-config mistakes (typos, missed setup, drift) loudly. Consumers building stateful fakes that wrap the generated handler should register a `Default<OpName>` per operation at construction time to opt out of strictness for the ops they want graceful-empty behavior on.
 - **Per-operation defaults**: `Default<OpName>` registers a fallback responder that never consumes count and never errors at cleanup. Calling it again replaces the previous default.
-- **Reset semantics**: `Reset()` and `Reset<OpName>()` wipe expectations + default and disarm pending cleanup errors. They become no-ops (with `tb.Errorf`) once the handler has served any request, so they're safe to use only during test setup.
+- **Reset semantics**: `Reset()` and `Reset<OpName>()` wipe expectations + default and disarm pending cleanup errors. `Reset<OpName>(vars...)` is the targeted variant — wipes only matching expectations, leaves the default and non-matching expectations alone. All Reset variants become no-ops (with `tb.Errorf`) once the handler has served any request, so they're safe to use only during test setup.
 - **Expectation tracking**: Each expectation tracks remaining invocations via `times` counter
 - **Automatic verification**: Cleanup functions verify all expectations were fully consumed
 - **Embedded helpers**: The helpers package is embedded into generated code (with package name replaced) so generated packages have zero runtime dependencies beyond the standard library

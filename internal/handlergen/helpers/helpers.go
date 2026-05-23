@@ -147,6 +147,31 @@ func (e *expectResponses[REQ, RESP]) clear() {
 	e.defaultResp = nil
 }
 
+// clearByRequests removes only those registered expectations whose key
+// matches one of the provided requests, disarming their cleanup hooks.
+// Non-matching expectations and the default response are left untouched.
+// A request that matches no expectation is a no-op for that request.
+func (e *expectResponses[REQ, RESP]) clearByRequests(reqs []REQ) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	keys := make(map[string]struct{}, len(reqs))
+	for _, r := range reqs {
+		keys[keyHash(r, nil)] = struct{}{}
+	}
+
+	filtered := make([]*expectResponse[REQ, RESP], 0, len(e.expectations))
+	for _, ex := range e.expectations {
+		_, match := keys[ex.keyHash]
+		if match {
+			ex.times = 0
+			continue
+		}
+		filtered = append(filtered, ex)
+	}
+	e.expectations = filtered
+}
+
 func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody io.Reader) (RESP, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()

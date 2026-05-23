@@ -142,18 +142,25 @@ func (s *TestHandler) Default{{.Name}}() *{{.BuilderTypeName}} {
 	}
 }
 
-// Reset{{.Name}} wipes the registered expectations and the default for the
-// {{.Name}} operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// Reset{{.Name}} wipes registered expectations for the {{.Name}} operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // Reset{{.Name}} records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) Reset{{.Name}}() {
+func (s *TestHandler) Reset{{.Name}}(vars ...{{.VariablesType}}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.Reset{{.Name}} called after handler has served at least one request")
 		return
 	}
-	s.{{.ExpectationField}}.clear()
+	if len(vars) == 0 {
+		s.{{.ExpectationField}}.clear()
+		return
+	}
+	s.{{.ExpectationField}}.clearByRequests(vars)
 }
 
 {{end -}}

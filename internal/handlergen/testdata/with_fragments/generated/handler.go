@@ -140,18 +140,25 @@ func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	}
 }
 
-// ResetGetUser wipes the registered expectations and the default for the
-// GetUser operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetUser wipes registered expectations for the GetUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetUser records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetUser() {
+func (s *TestHandler) ResetGetUser(vars ...GetUserVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetUser called after handler has served at least one request")
 		return
 	}
-	s.getUserExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getUserExpectResponses.clear()
+		return
+	}
+	s.getUserExpectResponses.clearByRequests(vars)
 }
 
 // getNodeResult is the result interface for the GetNode operation.
@@ -237,16 +244,23 @@ func (s *TestHandler) DefaultGetNode() *GetNodeExpectation {
 	}
 }
 
-// ResetGetNode wipes the registered expectations and the default for the
-// GetNode operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetNode wipes registered expectations for the GetNode operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetNode records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetNode() {
+func (s *TestHandler) ResetGetNode(vars ...GetNodeVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetNode called after handler has served at least one request")
 		return
 	}
-	s.getNodeExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getNodeExpectResponses.clear()
+		return
+	}
+	s.getNodeExpectResponses.clearByRequests(vars)
 }

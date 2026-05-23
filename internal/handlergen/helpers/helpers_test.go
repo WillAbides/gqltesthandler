@@ -761,3 +761,114 @@ func TestClear(t *testing.T) {
 		tb.AssertNoErrors()
 	})
 }
+
+func TestClearByRequests(t *testing.T) {
+	t.Run("wipes matching expectations and leaves others", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		keep := testRequest{ID: 1, Name: "keep"}
+		drop := testRequest{ID: 2, Name: "drop"}
+		exp.expect(tb, keep, nil, testResponse{Message: "keep"})
+		exp.expect(tb, drop, nil, testResponse{Message: "drop"})
+
+		exp.clearByRequests([]testRequest{drop})
+
+		// keep still matches
+		got, err := exp.getResponse(tb, keep, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "keep", got.Message)
+
+		// drop is gone
+		_, err = exp.getResponse(tb, drop, nil)
+		assert.Error(t, err)
+
+		tb.RunCleanups()
+		// keep's cleanup is satisfied (we consumed it). drop's cleanup must
+		// also be satisfied because clearByRequests disarmed it.
+		tb.AssertErrors() // the explicit error above counts
+	})
+
+	t.Run("leaves the default response intact", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "concrete"}
+		exp.setDefault(testResponse{Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Message: "concrete"})
+
+		exp.clearByRequests([]testRequest{req})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message, "default should still serve after targeted wipe of concrete")
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("wipes all expectations sharing the same key", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "shared"}
+		exp.expect(tb, req, nil, testResponse{Message: "first"})
+		exp.expect(tb, req, nil, testResponse{Message: "second"})
+
+		exp.clearByRequests([]testRequest{req})
+
+		_, err := exp.getResponse(tb, req, nil)
+		assert.Error(t, err, "both shared-key expectations should be gone")
+
+		tb.RunCleanups()
+		tb.AssertErrors() // the explicit error above; no cleanup errors expected
+	})
+
+	t.Run("disarms cleanup hooks for the wiped expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		drop := testRequest{ID: 1, Name: "drop"}
+		exp.expect(tb, drop, nil, testResponse{}, Times(5))
+
+		exp.clearByRequests([]testRequest{drop})
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("non-matching vars is a no-op (not an error)", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		keep := testRequest{ID: 1, Name: "keep"}
+		exp.expect(tb, keep, nil, testResponse{Message: "keep"})
+
+		// vars that match nothing — should not error or remove anything.
+		exp.clearByRequests([]testRequest{{ID: 999, Name: "ghost"}})
+
+		got, err := exp.getResponse(tb, keep, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "keep", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("empty request slice is a no-op", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Message: "ok"})
+
+		exp.clearByRequests(nil)
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "ok", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+}

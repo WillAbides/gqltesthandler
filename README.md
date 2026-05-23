@@ -184,9 +184,28 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "stale"}).Respond(usertest.G
 handler.ResetGetUser() // wipes the above without failing the test
 ```
 
-Both `Reset()` and `Reset<OpName>()` record an error via `t.Errorf` and leave
-state untouched if the handler has already served any request. They are safe
-to use only during test setup, before any client calls have been made.
+`Reset<OperationName>` is also variadic on the operation's variables type. When
+called with one or more variables, it wipes only the registered expectations
+whose key matches one of the provided variables — the default responder and
+any non-matching expectations are left untouched. A variables entry that
+matches no registered expectation is a silent no-op. This supports layered
+fixture patterns where one layer pre-registers stubs and a downstream layer
+swaps in a stricter assertion for a specific key without disturbing the rest:
+
+```go
+// Fixture layer registers MinTimes(0) stubs for every seeded user.
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.MinTimes(0)).Respond(stub1)
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "2"}, usertest.MinTimes(0)).Respond(stub2)
+
+// Downstream test replaces the ID "1" cell with a stricter assertion.
+handler.ResetGetUser(usertest.GetUserVariables{ID: "1"})
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.Times(1)).Respond(realResponse)
+```
+
+Both `Reset()` and `Reset<OpName>()` (with or without args) record an error
+via `t.Errorf` and leave state untouched if the handler has already served any
+request. They are safe to use only during test setup, before any client calls
+have been made.
 
 ## CLI Usage
 

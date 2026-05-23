@@ -146,18 +146,25 @@ func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 	}
 }
 
-// ResetGetUser wipes the registered expectations and the default for the
-// GetUser operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetUser wipes registered expectations for the GetUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetUser records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetUser() {
+func (s *TestHandler) ResetGetUser(vars ...GetUserVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetUser called after handler has served at least one request")
 		return
 	}
-	s.getUserExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getUserExpectResponses.clear()
+		return
+	}
+	s.getUserExpectResponses.clearByRequests(vars)
 }
 
 // listUsersResult is the result interface for the ListUsers operation.
@@ -243,18 +250,25 @@ func (s *TestHandler) DefaultListUsers() *ListUsersExpectation {
 	}
 }
 
-// ResetListUsers wipes the registered expectations and the default for the
-// ListUsers operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetListUsers wipes registered expectations for the ListUsers operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetListUsers records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetListUsers() {
+func (s *TestHandler) ResetListUsers(vars ...ListUsersVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetListUsers called after handler has served at least one request")
 		return
 	}
-	s.listUsersExpectResponses.clear()
+	if len(vars) == 0 {
+		s.listUsersExpectResponses.clear()
+		return
+	}
+	s.listUsersExpectResponses.clearByRequests(vars)
 }
 
 // createUserResult is the result interface for the CreateUser operation.
@@ -340,18 +354,25 @@ func (s *TestHandler) DefaultCreateUser() *CreateUserExpectation {
 	}
 }
 
-// ResetCreateUser wipes the registered expectations and the default for the
-// CreateUser operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetCreateUser wipes registered expectations for the CreateUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetCreateUser records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetCreateUser() {
+func (s *TestHandler) ResetCreateUser(vars ...CreateUserVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetCreateUser called after handler has served at least one request")
 		return
 	}
-	s.createUserExpectResponses.clear()
+	if len(vars) == 0 {
+		s.createUserExpectResponses.clear()
+		return
+	}
+	s.createUserExpectResponses.clearByRequests(vars)
 }
 
 // updateUserResult is the result interface for the UpdateUser operation.
@@ -437,18 +458,25 @@ func (s *TestHandler) DefaultUpdateUser() *UpdateUserExpectation {
 	}
 }
 
-// ResetUpdateUser wipes the registered expectations and the default for the
-// UpdateUser operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetUpdateUser wipes registered expectations for the UpdateUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetUpdateUser records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetUpdateUser() {
+func (s *TestHandler) ResetUpdateUser(vars ...UpdateUserVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetUpdateUser called after handler has served at least one request")
 		return
 	}
-	s.updateUserExpectResponses.clear()
+	if len(vars) == 0 {
+		s.updateUserExpectResponses.clear()
+		return
+	}
+	s.updateUserExpectResponses.clearByRequests(vars)
 }
 
 // deleteUserResult is the result interface for the DeleteUser operation.
@@ -534,16 +562,23 @@ func (s *TestHandler) DefaultDeleteUser() *DeleteUserExpectation {
 	}
 }
 
-// ResetDeleteUser wipes the registered expectations and the default for the
-// DeleteUser operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetDeleteUser wipes registered expectations for the DeleteUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetDeleteUser records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetDeleteUser() {
+func (s *TestHandler) ResetDeleteUser(vars ...DeleteUserVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetDeleteUser called after handler has served at least one request")
 		return
 	}
-	s.deleteUserExpectResponses.clear()
+	if len(vars) == 0 {
+		s.deleteUserExpectResponses.clear()
+		return
+	}
+	s.deleteUserExpectResponses.clearByRequests(vars)
 }

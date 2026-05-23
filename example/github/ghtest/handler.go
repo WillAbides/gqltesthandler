@@ -142,18 +142,25 @@ func (s *TestHandler) DefaultGetPullRequestReviews() *GetPullRequestReviewsExpec
 	}
 }
 
-// ResetGetPullRequestReviews wipes the registered expectations and the default for the
-// GetPullRequestReviews operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetPullRequestReviews wipes registered expectations for the GetPullRequestReviews operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetPullRequestReviews records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetPullRequestReviews() {
+func (s *TestHandler) ResetGetPullRequestReviews(vars ...GetPullRequestReviewsVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestReviews called after handler has served at least one request")
 		return
 	}
-	s.getPullRequestReviewsExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getPullRequestReviewsExpectResponses.clear()
+		return
+	}
+	s.getPullRequestReviewsExpectResponses.clearByRequests(vars)
 }
 
 // getPullRequestThreadsResult is the result interface for the GetPullRequestThreads operation.
@@ -239,18 +246,25 @@ func (s *TestHandler) DefaultGetPullRequestThreads() *GetPullRequestThreadsExpec
 	}
 }
 
-// ResetGetPullRequestThreads wipes the registered expectations and the default for the
-// GetPullRequestThreads operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetPullRequestThreads wipes registered expectations for the GetPullRequestThreads operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetPullRequestThreads records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetPullRequestThreads() {
+func (s *TestHandler) ResetGetPullRequestThreads(vars ...GetPullRequestThreadsVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestThreads called after handler has served at least one request")
 		return
 	}
-	s.getPullRequestThreadsExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getPullRequestThreadsExpectResponses.clear()
+		return
+	}
+	s.getPullRequestThreadsExpectResponses.clearByRequests(vars)
 }
 
 // getPullRequestThreadCommentsResult is the result interface for the GetPullRequestThreadComments operation.
@@ -336,16 +350,23 @@ func (s *TestHandler) DefaultGetPullRequestThreadComments() *GetPullRequestThrea
 	}
 }
 
-// ResetGetPullRequestThreadComments wipes the registered expectations and the default for the
-// GetPullRequestThreadComments operation and disarms their cleanup errors. If the handler has
-// already served any request (checked handler-wide, not per-operation),
+// ResetGetPullRequestThreadComments wipes registered expectations for the GetPullRequestThreadComments operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
 // ResetGetPullRequestThreadComments records an error via tb.Errorf and leaves state untouched.
-func (s *TestHandler) ResetGetPullRequestThreadComments() {
+func (s *TestHandler) ResetGetPullRequestThreadComments(vars ...GetPullRequestThreadCommentsVariables) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestThreadComments called after handler has served at least one request")
 		return
 	}
-	s.getPullRequestThreadCommentsExpectResponses.clear()
+	if len(vars) == 0 {
+		s.getPullRequestThreadCommentsExpectResponses.clear()
+		return
+	}
+	s.getPullRequestThreadCommentsExpectResponses.clearByRequests(vars)
 }

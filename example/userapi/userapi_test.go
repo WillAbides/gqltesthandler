@@ -164,6 +164,67 @@ func TestReset_BeforeRequests(t *testing.T) {
 	require.Equal(t, "Alice", resp.User.Name)
 }
 
+func TestResetGetUser_TargetedWipe(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	// Fixture layer pre-registers stubs.
+	handler.DefaultGetUser().Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "0", Name: "default"},
+	})
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.MinTimes(0)).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "fixture-1"},
+	})
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "2"}, usertest.MinTimes(0)).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "2", Name: "fixture-2"},
+	})
+
+	// Downstream layer wants a stricter assertion for ID "1" only.
+	handler.ResetGetUser(usertest.GetUserVariables{ID: "1"})
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "strict-1"},
+	})
+
+	// ID "1" gets the strict response.
+	got1, err := client.GetUser(t.Context(), "1")
+	require.NoError(t, err)
+	require.Equal(t, "strict-1", got1.User.Name)
+
+	// ID "2" still uses the untouched fixture.
+	got2, err := client.GetUser(t.Context(), "2")
+	require.NoError(t, err)
+	require.Equal(t, "fixture-2", got2.User.Name)
+
+	// Unmapped ID still falls through to the default — proves the default
+	// was not wiped by the targeted reset.
+	got3, err := client.GetUser(t.Context(), "99")
+	require.NoError(t, err)
+	require.Equal(t, "default", got3.User.Name)
+}
+
+func TestResetGetUser_TargetedWipeNoMatch(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Respond(usertest.GetUserResponse{
+		User: &usertest.GetUserResponseUser{ID: "1", Name: "Alice"},
+	})
+
+	// Resetting a variables set that was never registered is a no-op — not
+	// an error. The expectation for ID "1" must still serve.
+	handler.ResetGetUser(usertest.GetUserVariables{ID: "ghost"})
+
+	resp, err := client.GetUser(t.Context(), "1")
+	require.NoError(t, err)
+	require.Equal(t, "Alice", resp.User.Name)
+}
+
 func TestReset_AfterServedRecordsError(t *testing.T) {
 	tb := &recordingTB{t: t}
 	handler := usertest.NewTestHandler(tb)
