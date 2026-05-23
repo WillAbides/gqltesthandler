@@ -13,12 +13,24 @@ update_file_section() {
   end_comment="$3"
   replacement="$4"
 
-  pattern="${start_comment}*${end_comment}"
-  data="$(cat "$file")"
-  replacement="$start_comment
-$replacement
-$end_comment"
-  echo "${data//$pattern/$replacement}" > "$file"
+  python - "$file" "$start_comment" "$end_comment" "$replacement" <<'PY'
+from pathlib import Path
+import sys
+
+file, start_comment, end_comment, replacement = sys.argv[1:]
+content = Path(file).read_text()
+start_idx = content.find(start_comment)
+if start_idx == -1:
+    sys.exit(f"start comment not found in {file}: {start_comment}")
+end_search_start = start_idx + len(start_comment)
+end_idx = content.find(end_comment, end_search_start)
+if end_idx == -1:
+    sys.exit(f"end comment not found in {file}: {end_comment}")
+
+replacement = f"{start_comment}\n{replacement}\n{end_comment}"
+updated = content[:start_idx] + replacement + content[end_idx + len(end_comment):]
+Path(file).write_text(updated)
+PY
 }
 
 if [ -f script/gqltesthandler ]; then
