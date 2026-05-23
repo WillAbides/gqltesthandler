@@ -5,6 +5,9 @@
 
 set -e
 
+# Disable bash 5.0+ patsub_replacement so '&' in replacements is literal.
+shopt -u patsub_replacement 2>/dev/null || :
+
 CDPATH="" cd -- "$(dirname -- "$0")/.."
 
 update_file_section() {
