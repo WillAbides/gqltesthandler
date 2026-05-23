@@ -42,21 +42,17 @@ func (s *TestHandler) markServed() {
 	s.served = true
 }
 
-// hasServed reports whether the handler has processed any request.
-func (s *TestHandler) hasServed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.served
-}
-
 // Reset wipes all registered expectations and defaults on this handler and
 // clears any pending cleanup errors so previously-unmet expectations will not
 // fail the test. Reset records an error via tb.Errorf and leaves state
 // untouched if the handler has already served any request (checked
 // handler-wide, not per-operation), so it is safe to call only during test
-// setup.
+// setup. The served-check and the clear are performed atomically — no
+// request can mark the handler served while a Reset is in progress.
 func (s *TestHandler) Reset() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
 		return
 	}
@@ -162,9 +158,13 @@ func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
 // GetUser operation, and clears any pending cleanup errors. ResetGetUser
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetGetUser is in progress.
 func (s *TestHandler) ResetGetUser() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetUser called after handler has served at least one request")
 		return
 	}
@@ -266,9 +266,13 @@ func (s *TestHandler) DefaultListUsers() *ListUsersExpectation {
 // ListUsers operation, and clears any pending cleanup errors. ResetListUsers
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetListUsers is in progress.
 func (s *TestHandler) ResetListUsers() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetListUsers called after handler has served at least one request")
 		return
 	}
@@ -370,9 +374,13 @@ func (s *TestHandler) DefaultCreateUser() *CreateUserExpectation {
 // CreateUser operation, and clears any pending cleanup errors. ResetCreateUser
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetCreateUser is in progress.
 func (s *TestHandler) ResetCreateUser() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetCreateUser called after handler has served at least one request")
 		return
 	}
@@ -474,9 +482,13 @@ func (s *TestHandler) DefaultUpdateUser() *UpdateUserExpectation {
 // UpdateUser operation, and clears any pending cleanup errors. ResetUpdateUser
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetUpdateUser is in progress.
 func (s *TestHandler) ResetUpdateUser() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetUpdateUser called after handler has served at least one request")
 		return
 	}
@@ -578,9 +590,13 @@ func (s *TestHandler) DefaultDeleteUser() *DeleteUserExpectation {
 // DeleteUser operation, and clears any pending cleanup errors. ResetDeleteUser
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetDeleteUser is in progress.
 func (s *TestHandler) ResetDeleteUser() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetDeleteUser called after handler has served at least one request")
 		return
 	}

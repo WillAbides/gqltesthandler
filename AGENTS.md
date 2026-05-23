@@ -111,7 +111,7 @@ For each GraphQL operation, the generator creates:
 3. An `expectResponses` field in TestHandler (e.g., `getUserExpectResponses`)
 4. An `Expect{OperationName}` method on TestHandler that accepts a variables struct and returns a `{OperationName}Expectation` builder
 5. Builder methods on the expectation: `Respond(data)`, `RespondError(errors...)`, `Handle(fn)`
-6. A `Default{OperationName}` method that returns a `{OperationName}Default` builder for the per-operation default responder
+6. A `Default{OperationName}` method that returns the same `{OperationName}Expectation` builder (with an internal `isDefault` flag) for the per-operation default responder. The builder routes `Respond` / `RespondError` / `Handle` to the default slot instead of registering an expectation.
 7. A `Reset{OperationName}` method that wipes expectations and the default for that operation
 8. A case in testServer's `ServeHTTP` switch that unmarshals variables and calls `getResponse()`
 
@@ -227,7 +227,7 @@ Tests use httptest.NewServer with the TestHandler:
 - **Response shaped by selection set**: Generated response types only include fields that the operation actually selects, matching what a real GraphQL server would return
 - **Nested response structs**: Object fields in selections generate nested structs (e.g., `GetUserResponseUser`) rather than reusing schema-level types, ensuring response shapes match the operation
 - **Options placement**: Options like `Times()` are passed to the Expect method, not the Respond method, for cleaner syntax: `ExpectGetUser(vars, Times(3)).Respond(...)`
-- **Custom handlers via Handle() method**: Each builder generates a `Handle()` method that accepts `func(VariablesType, http.ResponseWriter)`, providing full control over HTTP responses. On `Expect*` builders the function receives the originally-registered variables; on `Default*` builders it receives the actual variables from the incoming request.
+- **Custom handlers via Handle() method**: Each builder generates a `Handle()` method that accepts `func(VariablesType, http.ResponseWriter)`, providing full control over HTTP responses. The function always receives the variables from the incoming request. For an `Expect*` match those variables are equal to the registered variables by construction (matching requires variable equality); for a `Default*` they can be anything the client sent.
 - **GraphQL error support**: `RespondError()` returns standard GraphQL error responses with message, path, and extensions fields
 - **FIFO expectation matching**: First matching concrete expectation with remaining times is used; the per-operation default is consulted only when no concrete match exists
 - **Per-operation defaults**: `Default<OpName>` registers a fallback responder that never consumes count and never errors at cleanup. Calling it again replaces the previous default.

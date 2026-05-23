@@ -40,21 +40,17 @@ func (s *TestHandler) markServed() {
 	s.served = true
 }
 
-// hasServed reports whether the handler has processed any request.
-func (s *TestHandler) hasServed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.served
-}
-
 // Reset wipes all registered expectations and defaults on this handler and
 // clears any pending cleanup errors so previously-unmet expectations will not
 // fail the test. Reset records an error via tb.Errorf and leaves state
 // untouched if the handler has already served any request (checked
 // handler-wide, not per-operation), so it is safe to call only during test
-// setup.
+// setup. The served-check and the clear are performed atomically — no
+// request can mark the handler served while a Reset is in progress.
 func (s *TestHandler) Reset() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
 		return
 	}
@@ -158,9 +154,13 @@ func (s *TestHandler) DefaultGetPullRequestReviews() *GetPullRequestReviewsExpec
 // GetPullRequestReviews operation, and clears any pending cleanup errors. ResetGetPullRequestReviews
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetGetPullRequestReviews is in progress.
 func (s *TestHandler) ResetGetPullRequestReviews() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestReviews called after handler has served at least one request")
 		return
 	}
@@ -262,9 +262,13 @@ func (s *TestHandler) DefaultGetPullRequestThreads() *GetPullRequestThreadsExpec
 // GetPullRequestThreads operation, and clears any pending cleanup errors. ResetGetPullRequestThreads
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetGetPullRequestThreads is in progress.
 func (s *TestHandler) ResetGetPullRequestThreads() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestThreads called after handler has served at least one request")
 		return
 	}
@@ -366,9 +370,13 @@ func (s *TestHandler) DefaultGetPullRequestThreadComments() *GetPullRequestThrea
 // GetPullRequestThreadComments operation, and clears any pending cleanup errors. ResetGetPullRequestThreadComments
 // records an error via tb.Errorf and leaves state untouched if the handler
 // has already served any request (checked handler-wide, not per-operation),
-// so it is safe to call only during test setup.
+// so it is safe to call only during test setup. The served-check and the
+// clear are performed atomically — no request can mark the handler served
+// while a ResetGetPullRequestThreadComments is in progress.
 func (s *TestHandler) ResetGetPullRequestThreadComments() {
-	if s.hasServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
 		s.tb.Errorf("TestHandler.ResetGetPullRequestThreadComments called after handler has served at least one request")
 		return
 	}
