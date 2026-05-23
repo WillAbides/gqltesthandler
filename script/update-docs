@@ -21,11 +21,13 @@ file, start_comment, end_comment, replacement = sys.argv[1:]
 content = Path(file).read_text()
 start_idx = content.find(start_comment)
 if start_idx == -1:
-    sys.exit(f"start comment not found in {file}: {start_comment}")
+    print(f"start comment not found in {file}: {start_comment}", file=sys.stderr)
+    sys.exit(1)
 end_search_start = start_idx + len(start_comment)
 end_idx = content.find(end_comment, end_search_start)
 if end_idx == -1:
-    sys.exit(f"end comment not found in {file}: {end_comment}")
+    print(f"end comment not found in {file}: {end_comment}", file=sys.stderr)
+    sys.exit(1)
 
 replacement = f"{start_comment}\n{replacement}\n{end_comment}"
 updated = content[:start_idx] + replacement + content[end_idx + len(end_comment):]
