@@ -133,14 +133,20 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
 
 ### Unmatched Operations
 
-The handler is **strict by default**: if a client sends an operation and
-neither a concrete `Expect<OpName>` expectation nor a `Default<OpName>`
-matches it, the handler calls `t.Errorf("no expectation found ...")` and
-returns a GraphQL error response. This surfaces test-configuration mistakes
-(typos in operation names, missed setup, drift between client and fixtures)
-loudly instead of silently returning empty data.
+The handler is **strict by default** for the operations the generator was run
+against: if a client sends a *known* operation and neither a concrete
+`Expect<OpName>` nor a `Default<OpName>` matches it, the handler calls
+`t.Errorf("no expectation found ...")` and returns a GraphQL error response.
+This surfaces missed test setup and fixture drift loudly instead of silently
+returning empty data.
 
-To opt out of strictness for a given operation — e.g. when building a
+Requests naming an *unknown* operation (typo, schema/operations drift) get
+back an `"unknown operation: ..."` GraphQL error response but do **not**
+trigger `t.Errorf` — there is no `Default<OpName>` you could have registered
+for an op the generator never saw. The test will still fail through its own
+assertions on the response payload.
+
+To opt out of strictness for a known operation — e.g. when building a
 stateful fake that wraps the generated handler and feeds responses from a
 seeded in-memory store — register a `Default<OpName>` for it at handler
 construction. A `Default<OpName>().Respond(emptyResponse)` is enough to
