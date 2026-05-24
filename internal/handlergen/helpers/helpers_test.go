@@ -29,6 +29,19 @@ type testResponse struct {
 	Message string
 }
 
+// errReader is an io.Reader that records when it is read and always returns
+// the configured error. Used by tests that need to prove a code path did not
+// touch the body.
+type errReader struct {
+	err  error
+	read bool
+}
+
+func (r *errReader) Read(p []byte) (int, error) {
+	r.read = true
+	return 0, r.err
+}
+
 func TestKeyHash(t *testing.T) {
 	t.Run("same request produces same hash", func(t *testing.T) {
 		req1 := testRequest{
@@ -510,5 +523,352 @@ func TestExpectations(t *testing.T) {
 		assert.PanicsWithValue(t, "MinTimes: n must be non-negative", func() {
 			MinTimes(-1)
 		})
+	})
+}
+
+func TestDefaultResponse(t *testing.T) {
+	t.Run("default matches when no concrete expectation matches", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 42, Name: "anything"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default ignores raw request body", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, strings.NewReader("totally different body"))
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete wins over default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "concrete", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete order does not matter for default precedence", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"})
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "concrete", got.Message)
+
+		// Subsequent unrelated request hits the default.
+		got2, err := exp.getResponse(tb, testRequest{ID: 99}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got2.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default is unlimited", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		for i := range 100 {
+			got, err := exp.getResponse(tb, testRequest{ID: i}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "default", got.Message)
+		}
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default with zero calls is fine", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("setDefault replaces the previous default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "first"})
+		exp.setDefault(testResponse{Status: 200, Message: "second"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("concrete expectations still consume normally with default present", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Status: 201, Message: "concrete"}, Times(2))
+
+		// Two concrete consumptions.
+		for i := range 2 {
+			got, err := exp.getResponse(tb, req, nil)
+			require.NoError(t, err, "call %d", i+1)
+			assert.Equal(t, "concrete", got.Message)
+		}
+
+		// Third call falls back to default.
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("fast path skips body read when only the default is registered", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		// A reader that would error if anyone actually read from it.
+		body := &errReader{err: io.ErrUnexpectedEOF}
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, body)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message)
+		assert.False(t, body.read, "expected body to be left unread on default fast path")
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("fast path errors without reading body when no default and no expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		body := &errReader{err: io.ErrUnexpectedEOF}
+
+		_, err := exp.getResponse(tb, testRequest{ID: 1}, body)
+		assert.Error(t, err)
+		assert.False(t, body.read, "expected body to be left unread on empty fast path")
+		tb.AssertErrors()
+	})
+}
+
+func TestClear(t *testing.T) {
+	t.Run("clear removes expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Status: 200, Message: "ok"})
+
+		exp.clear()
+
+		_, err := exp.getResponse(tb, req, nil)
+		assert.Error(t, err, "expected no expectation after clear")
+	})
+
+	t.Run("clear disarms cleanup errors for unmet expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{}, Times(5))
+
+		exp.clear()
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("clear removes default", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Status: 200, Message: "default"})
+
+		exp.clear()
+
+		_, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		assert.Error(t, err, "expected no default after clear")
+	})
+
+	t.Run("expectations registered after clear still work", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.expect(tb, testRequest{ID: 1}, nil, testResponse{Message: "first"})
+		exp.clear()
+
+		req := testRequest{ID: 2}
+		exp.expect(tb, req, nil, testResponse{Message: "second"})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("default registered after clear still works", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		exp.setDefault(testResponse{Message: "first"})
+		exp.clear()
+		exp.setDefault(testResponse{Message: "second"})
+
+		got, err := exp.getResponse(tb, testRequest{ID: 1}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "second", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+}
+
+func TestClearByRequests(t *testing.T) {
+	t.Run("wipes matching expectations and leaves others", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		keep := testRequest{ID: 1, Name: "keep"}
+		drop := testRequest{ID: 2, Name: "drop"}
+		exp.expect(tb, keep, nil, testResponse{Message: "keep"})
+		exp.expect(tb, drop, nil, testResponse{Message: "drop"})
+
+		exp.clearByRequests([]testRequest{drop})
+
+		// keep still matches
+		got, err := exp.getResponse(tb, keep, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "keep", got.Message)
+
+		// drop is gone
+		_, err = exp.getResponse(tb, drop, nil)
+		assert.Error(t, err)
+
+		tb.RunCleanups()
+		// keep's cleanup is satisfied (we consumed it). drop's cleanup must
+		// also be satisfied because clearByRequests disarmed it.
+		tb.AssertErrors() // the explicit error above counts
+	})
+
+	t.Run("leaves the default response intact", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "concrete"}
+		exp.setDefault(testResponse{Message: "default"})
+		exp.expect(tb, req, nil, testResponse{Message: "concrete"})
+
+		exp.clearByRequests([]testRequest{req})
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "default", got.Message, "default should still serve after targeted wipe of concrete")
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("wipes all expectations sharing the same key", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "shared"}
+		exp.expect(tb, req, nil, testResponse{Message: "first"})
+		exp.expect(tb, req, nil, testResponse{Message: "second"})
+
+		exp.clearByRequests([]testRequest{req})
+
+		_, err := exp.getResponse(tb, req, nil)
+		assert.Error(t, err, "both shared-key expectations should be gone")
+
+		tb.RunCleanups()
+		tb.AssertErrors() // the explicit error above; no cleanup errors expected
+	})
+
+	t.Run("disarms cleanup hooks for the wiped expectations", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		drop := testRequest{ID: 1, Name: "drop"}
+		exp.expect(tb, drop, nil, testResponse{}, Times(5))
+
+		exp.clearByRequests([]testRequest{drop})
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("non-matching vars is a no-op (not an error)", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		keep := testRequest{ID: 1, Name: "keep"}
+		exp.expect(tb, keep, nil, testResponse{Message: "keep"})
+
+		// vars that match nothing — should not error or remove anything.
+		exp.clearByRequests([]testRequest{{ID: 999, Name: "ghost"}})
+
+		got, err := exp.getResponse(tb, keep, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "keep", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
+	})
+
+	t.Run("empty request slice is a no-op", func(t *testing.T) {
+		tb := testutil.NewTB(t)
+		exp := &expectResponses[testRequest, testResponse]{}
+
+		req := testRequest{ID: 1, Name: "test"}
+		exp.expect(tb, req, nil, testResponse{Message: "ok"})
+
+		exp.clearByRequests(nil)
+
+		got, err := exp.getResponse(tb, req, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "ok", got.Message)
+
+		tb.RunCleanups()
+		tb.AssertNoErrors()
 	})
 }

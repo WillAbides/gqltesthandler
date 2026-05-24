@@ -80,6 +80,7 @@ type expectResponse[REQ, RESP any] struct {
 
 type expectResponses[REQ, RESP any] struct {
 	expectations []*expectResponse[REQ, RESP]
+	defaultResp  *RESP
 	lock         sync.Mutex
 }
 
@@ -125,11 +126,70 @@ func (e *expectResponses[REQ, RESP]) expect(t TB, req REQ, rawRequestBody io.Rea
 	})
 }
 
+// setDefault registers (or replaces) the default response used when no
+// concrete expectation matches an incoming request. Defaults are infinitely
+// callable and never error at cleanup.
+func (e *expectResponses[REQ, RESP]) setDefault(resp RESP) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	e.defaultResp = &resp
+}
+
+// clear removes all registered expectations, the default response, and
+// disarms cleanup hooks for any unmet expectations.
+func (e *expectResponses[REQ, RESP]) clear() {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	for _, ex := range e.expectations {
+		ex.times = 0
+	}
+	e.expectations = nil
+	e.defaultResp = nil
+}
+
+// clearByRequests removes only those registered expectations whose key
+// matches one of the provided requests, disarming their cleanup hooks.
+// Non-matching expectations and the default response are left untouched.
+// A request that matches no expectation is a no-op for that request.
+func (e *expectResponses[REQ, RESP]) clearByRequests(reqs []REQ) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	keys := make(map[string]struct{}, len(reqs))
+	for _, r := range reqs {
+		keys[keyHash(r, nil)] = struct{}{}
+	}
+
+	filtered := make([]*expectResponse[REQ, RESP], 0, len(e.expectations))
+	for _, ex := range e.expectations {
+		_, match := keys[ex.keyHash]
+		if match {
+			ex.times = 0
+			continue
+		}
+		filtered = append(filtered, ex)
+	}
+	e.expectations = filtered
+}
+
 func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody io.Reader) (RESP, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
 	var zeroResp RESP
+
+	// Fast path: no expectations to match against. Skip body read and
+	// hashing entirely — go straight to the default (if any) or report
+	// missing expectation.
+	if len(e.expectations) == 0 {
+		if e.defaultResp != nil {
+			return *e.defaultResp, nil
+		}
+		t.Errorf("no expectation found for request %+v", req)
+		return zeroResp, fmt.Errorf("no expectation found for request")
+	}
 
 	bodyBytes, err := func() ([]byte, error) {
 		if rawRequestBody == nil {
@@ -145,14 +205,18 @@ func (e *expectResponses[REQ, RESP]) getResponse(t TB, req REQ, rawRequestBody i
 	idx := slices.IndexFunc(e.expectations, func(e *expectResponse[REQ, RESP]) bool {
 		return (e.atLeast || e.times > 0) && e.keyHash == key
 	})
-	if idx == -1 {
-		t.Errorf("no expectation found for request %+v", req)
-		return zeroResp, fmt.Errorf("no expectation found for request")
+	if idx != -1 {
+		ex := e.expectations[idx]
+		if ex.times > 0 {
+			ex.times--
+		}
+		return ex.response, nil
 	}
 
-	ex := e.expectations[idx]
-	if ex.times > 0 {
-		ex.times--
+	if e.defaultResp != nil {
+		return *e.defaultResp, nil
 	}
-	return ex.response, nil
+
+	t.Errorf("no expectation found for request %+v", req)
+	return zeroResp, fmt.Errorf("no expectation found for request")
 }

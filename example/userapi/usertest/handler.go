@@ -4,6 +4,7 @@ package usertest
 
 import (
 	"net/http"
+	"sync"
 )
 
 // TestHandler is a mock GraphQL HTTP handler for testing.
@@ -11,6 +12,9 @@ import (
 type TestHandler struct {
 	tb      TB
 	handler http.Handler
+
+	mu     sync.Mutex
+	served bool
 
 	getUserExpectResponses    expectResponses[GetUserVariables, getUserResult]
 	createUserExpectResponses expectResponses[CreateUserVariables, createUserResult]
@@ -27,16 +31,42 @@ func NewTestHandler(tb TB) *TestHandler {
 	return th
 }
 
+// markServed records that the handler has processed a request. Once true,
+// Reset and Reset<OpName> refuse to wipe state.
+func (s *TestHandler) markServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.served = true
+}
+
+// Reset wipes all registered expectations and defaults on this handler and
+// clears any pending cleanup errors so previously-unmet expectations will not
+// fail the test. Reset records an error via tb.Errorf and leaves state
+// untouched if the handler has already served any request (checked
+// handler-wide, not per-operation), so it is safe to call only during test
+// setup. The served-check and the clear are performed atomically — no
+// request can mark the handler served while a Reset is in progress.
+func (s *TestHandler) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
+		return
+	}
+	s.getUserExpectResponses.clear()
+	s.createUserExpectResponses.clear()
+}
+
 // getUserResult is the result interface for the GetUser operation.
 type getUserResult interface {
-	writeGetUserResult(w http.ResponseWriter) error
+	writeGetUserResult(w http.ResponseWriter, vars GetUserVariables) error
 }
 
 type getUserDataResult struct {
 	data GetUserResponse
 }
 
-func (r getUserDataResult) writeGetUserResult(w http.ResponseWriter) error {
+func (r getUserDataResult) writeGetUserResult(w http.ResponseWriter, _ GetUserVariables) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -44,40 +74,50 @@ type getUserErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r getUserErrorResult) writeGetUserResult(w http.ResponseWriter) error {
+func (r getUserErrorResult) writeGetUserResult(w http.ResponseWriter, _ GetUserVariables) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type getUserRawResult struct {
-	vars GetUserVariables
-	fn   func(GetUserVariables, http.ResponseWriter)
+	fn func(GetUserVariables, http.ResponseWriter)
 }
 
-func (r getUserRawResult) writeGetUserResult(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r getUserRawResult) writeGetUserResult(w http.ResponseWriter, vars GetUserVariables) error {
+	r.fn(vars, w)
 	return nil
 }
 
-// GetUserExpectation is a builder for setting the response of a GetUser expectation.
+// GetUserExpectation is a builder for setting the response of a GetUser
+// expectation or default.
 type GetUserExpectation struct {
-	handler *TestHandler
-	vars    GetUserVariables
-	opts    []ExpectOption
+	handler   *TestHandler
+	vars      GetUserVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetUserExpectation) register(resp getUserResult) {
+	if b.isDefault {
+		b.handler.getUserExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
 // Respond sets the expectation to return the given data.
 func (b *GetUserExpectation) Respond(data GetUserResponse) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserDataResult{data: data}, b.opts...)
+	b.register(getUserDataResult{data: data})
 }
 
 // RespondError sets the expectation to return GraphQL errors.
 func (b *GetUserExpectation) RespondError(errors ...GraphQLError) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserErrorResult{errors: errors}, b.opts...)
+	b.register(getUserErrorResult{errors: errors})
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
 func (b *GetUserExpectation) Handle(fn func(GetUserVariables, http.ResponseWriter)) {
-	b.handler.getUserExpectResponses.expect(b.handler.tb, b.vars, nil, getUserRawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.register(getUserRawResult{fn: fn})
 }
 
 // ExpectGetUser sets up an expectation for the GetUser operation.
@@ -89,16 +129,48 @@ func (s *TestHandler) ExpectGetUser(vars GetUserVariables, opts ...ExpectOption)
 	}
 }
 
+// DefaultGetUser returns a builder for the default GetUser responder,
+// used when no ExpectGetUser matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetUser() *GetUserExpectation {
+	return &GetUserExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetUser wipes registered expectations for the GetUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetUser records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetUser(vars ...GetUserVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetUser called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getUserExpectResponses.clear()
+		return
+	}
+	s.getUserExpectResponses.clearByRequests(vars)
+}
+
 // createUserResult is the result interface for the CreateUser operation.
 type createUserResult interface {
-	writeCreateUserResult(w http.ResponseWriter) error
+	writeCreateUserResult(w http.ResponseWriter, vars CreateUserVariables) error
 }
 
 type createUserDataResult struct {
 	data CreateUserResponse
 }
 
-func (r createUserDataResult) writeCreateUserResult(w http.ResponseWriter) error {
+func (r createUserDataResult) writeCreateUserResult(w http.ResponseWriter, _ CreateUserVariables) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -106,40 +178,50 @@ type createUserErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r createUserErrorResult) writeCreateUserResult(w http.ResponseWriter) error {
+func (r createUserErrorResult) writeCreateUserResult(w http.ResponseWriter, _ CreateUserVariables) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type createUserRawResult struct {
-	vars CreateUserVariables
-	fn   func(CreateUserVariables, http.ResponseWriter)
+	fn func(CreateUserVariables, http.ResponseWriter)
 }
 
-func (r createUserRawResult) writeCreateUserResult(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r createUserRawResult) writeCreateUserResult(w http.ResponseWriter, vars CreateUserVariables) error {
+	r.fn(vars, w)
 	return nil
 }
 
-// CreateUserExpectation is a builder for setting the response of a CreateUser expectation.
+// CreateUserExpectation is a builder for setting the response of a CreateUser
+// expectation or default.
 type CreateUserExpectation struct {
-	handler *TestHandler
-	vars    CreateUserVariables
-	opts    []ExpectOption
+	handler   *TestHandler
+	vars      CreateUserVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *CreateUserExpectation) register(resp createUserResult) {
+	if b.isDefault {
+		b.handler.createUserExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
 // Respond sets the expectation to return the given data.
 func (b *CreateUserExpectation) Respond(data CreateUserResponse) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserDataResult{data: data}, b.opts...)
+	b.register(createUserDataResult{data: data})
 }
 
 // RespondError sets the expectation to return GraphQL errors.
 func (b *CreateUserExpectation) RespondError(errors ...GraphQLError) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserErrorResult{errors: errors}, b.opts...)
+	b.register(createUserErrorResult{errors: errors})
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
 func (b *CreateUserExpectation) Handle(fn func(CreateUserVariables, http.ResponseWriter)) {
-	b.handler.createUserExpectResponses.expect(b.handler.tb, b.vars, nil, createUserRawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.register(createUserRawResult{fn: fn})
 }
 
 // ExpectCreateUser sets up an expectation for the CreateUser operation.
@@ -149,4 +231,36 @@ func (s *TestHandler) ExpectCreateUser(vars CreateUserVariables, opts ...ExpectO
 		vars:    vars,
 		opts:    opts,
 	}
+}
+
+// DefaultCreateUser returns a builder for the default CreateUser responder,
+// used when no ExpectCreateUser matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultCreateUser() *CreateUserExpectation {
+	return &CreateUserExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetCreateUser wipes registered expectations for the CreateUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetCreateUser records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetCreateUser(vars ...CreateUserVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetCreateUser called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.createUserExpectResponses.clear()
+		return
+	}
+	s.createUserExpectResponses.clearByRequests(vars)
 }

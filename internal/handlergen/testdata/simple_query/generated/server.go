@@ -19,6 +19,8 @@ type graphqlRequest struct {
 }
 
 func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.handler.markServed()
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -46,7 +48,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeGetUserResult(w)
+		_ = resp.writeGetUserResult(w, vars)
 	case "ListUsers":
 		var vars ListUsersVariables
 		if len(req.Variables) > 0 {
@@ -61,7 +63,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGraphQLErrors(w, []GraphQLError{{Message: getErr.Error()}})
 			return
 		}
-		_ = resp.writeListUsersResult(w)
+		_ = resp.writeListUsersResult(w, vars)
 	default:
 		writeGraphQLErrors(w, []GraphQLError{{Message: "unknown operation: " + req.OperationName}})
 	}

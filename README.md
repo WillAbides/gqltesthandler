@@ -131,6 +131,88 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
 )
 ```
 
+### Unmatched Operations
+
+The handler is **strict by default** for the operations the generator was run
+against: if a client sends a *known* operation and neither a concrete
+`Expect<OpName>` nor a `Default<OpName>` matches it, the handler calls
+`t.Errorf("no expectation found ...")` and returns a GraphQL error response.
+This surfaces missed test setup and fixture drift loudly instead of silently
+returning empty data.
+
+Requests naming an *unknown* operation (typo, schema/operations drift) get
+back an `"unknown operation: ..."` GraphQL error response but do **not**
+trigger `t.Errorf` — there is no `Default<OpName>` you could have registered
+for an op the generator never saw. The test will still fail through its own
+assertions on the response payload.
+
+To opt out of strictness for a known operation — e.g. when building a
+stateful fake that wraps the generated handler and feeds responses from a
+seeded in-memory store — register a `Default<OpName>` for it at handler
+construction. A `Default<OpName>().Respond(emptyResponse)` is enough to
+turn the strict error into a graceful empty payload for that one operation,
+while leaving every other operation strict.
+
+### Per-Operation Defaults
+
+Each operation also gets a `Default{OperationName}()` method for registering a
+fallback response. Defaults match only when no concrete `Expect*` expectation
+matches the incoming request. They are infinitely callable and never fail at
+cleanup.
+
+```go
+// Static default
+handler.DefaultGetUser().Respond(usertest.GetUserResponse{
+    User: &usertest.GetUserResponseUser{Name: "stub"},
+})
+
+// Dynamic default — Handle on a Default builder receives the actual variables
+// from the incoming request, which is great for stateful test fakes.
+handler.DefaultGetUser().Handle(func(vars usertest.GetUserVariables, w http.ResponseWriter) {
+    // look up vars.ID in your in-memory store, write a response, etc.
+})
+```
+
+A concrete `Expect*` always wins over the default. Calling `Default<OpName>` a
+second time replaces the previous default. Defaults accept no
+`ExpectOption` — `Times`/`MinTimes` are meaningless for an infinitely callable
+fallback.
+
+### Resetting Expectations
+
+`handler.Reset<OperationName>()` wipes registered expectations and the default
+for one operation. `handler.Reset()` wipes everything across all operations.
+Both also clear any pending cleanup errors so previously-registered `Times(N)`
+expectations do not fire `t.Errorf` after a reset.
+
+```go
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "stale"}).Respond(usertest.GetUserResponse{})
+handler.ResetGetUser() // wipes the above without failing the test
+```
+
+`Reset<OperationName>` is also variadic on the operation's variables type. When
+called with one or more variables, it wipes only the registered expectations
+whose key matches one of the provided variables — the default responder and
+any non-matching expectations are left untouched. A variables entry that
+matches no registered expectation is a silent no-op. This supports layered
+fixture patterns where one layer pre-registers stubs and a downstream layer
+swaps in a stricter assertion for a specific key without disturbing the rest:
+
+```go
+// Fixture layer registers MinTimes(0) stubs for every seeded user.
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.MinTimes(0)).Respond(stub1)
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "2"}, usertest.MinTimes(0)).Respond(stub2)
+
+// Downstream test replaces the ID "1" cell with a stricter assertion.
+handler.ResetGetUser(usertest.GetUserVariables{ID: "1"})
+handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}, usertest.Times(1)).Respond(realResponse)
+```
+
+Both `Reset()` and `Reset<OpName>()` (with or without args) record an error
+via `t.Errorf` and leave state untouched if the handler has already served any
+request. They are safe to use only during test setup, before any client calls
+have been made.
+
 ## CLI Usage
 
 <!--- start usage output --->

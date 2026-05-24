@@ -2,13 +2,17 @@ package {{.PackageName}}
 
 import (
 	"net/http"
+	"sync"
 )
 
 // TestHandler is a mock GraphQL HTTP handler for testing.
 // Set expectations with Expect methods, then use as an http.Handler.
 type TestHandler struct {
-	tb TB
+	tb      TB
 	handler http.Handler
+
+	mu     sync.Mutex
+	served bool
 {{range .Operations}}
 	{{.ExpectationField}} expectResponses[{{.VariablesType}}, {{.ResultInterface}}]
 {{- end}}
@@ -25,19 +29,46 @@ func NewTestHandler(tb TB) *TestHandler {
 	return th
 }
 
+// markServed records that the handler has processed a request. Once true,
+// Reset and Reset<OpName> refuse to wipe state.
+func (s *TestHandler) markServed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.served = true
+}
+
+// Reset wipes all registered expectations and defaults on this handler and
+// clears any pending cleanup errors so previously-unmet expectations will not
+// fail the test. Reset records an error via tb.Errorf and leaves state
+// untouched if the handler has already served any request (checked
+// handler-wide, not per-operation), so it is safe to call only during test
+// setup. The served-check and the clear are performed atomically — no
+// request can mark the handler served while a Reset is in progress.
+func (s *TestHandler) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.Reset called after handler has served at least one request")
+		return
+	}
+{{- range .Operations}}
+	s.{{.ExpectationField}}.clear()
+{{- end}}
+}
+
 {{range .Operations -}}
 {{$op := . -}}
 
 // {{.ResultInterface}} is the result interface for the {{.Name}} operation.
 type {{.ResultInterface}} interface {
-	write{{.Name}}Result(w http.ResponseWriter) error
+	write{{.Name}}Result(w http.ResponseWriter, vars {{.VariablesType}}) error
 }
 
 type {{.LowercaseName}}DataResult struct {
 	data {{.ResponseType}}
 }
 
-func (r {{.LowercaseName}}DataResult) write{{.Name}}Result(w http.ResponseWriter) error {
+func (r {{.LowercaseName}}DataResult) write{{.Name}}Result(w http.ResponseWriter, _ {{.VariablesType}}) error {
 	return writeGraphQLData(w, r.data)
 }
 
@@ -45,40 +76,50 @@ type {{.LowercaseName}}ErrorResult struct {
 	errors []GraphQLError
 }
 
-func (r {{.LowercaseName}}ErrorResult) write{{.Name}}Result(w http.ResponseWriter) error {
+func (r {{.LowercaseName}}ErrorResult) write{{.Name}}Result(w http.ResponseWriter, _ {{.VariablesType}}) error {
 	return writeGraphQLErrors(w, r.errors)
 }
 
 type {{.LowercaseName}}RawResult struct {
-	vars {{.VariablesType}}
-	fn   func({{.VariablesType}}, http.ResponseWriter)
+	fn func({{.VariablesType}}, http.ResponseWriter)
 }
 
-func (r {{.LowercaseName}}RawResult) write{{.Name}}Result(w http.ResponseWriter) error {
-	r.fn(r.vars, w)
+func (r {{.LowercaseName}}RawResult) write{{.Name}}Result(w http.ResponseWriter, vars {{.VariablesType}}) error {
+	r.fn(vars, w)
 	return nil
 }
 
-// {{.BuilderTypeName}} is a builder for setting the response of a {{.Name}} expectation.
+// {{.BuilderTypeName}} is a builder for setting the response of a {{.Name}}
+// expectation or default.
 type {{.BuilderTypeName}} struct {
-	handler *TestHandler
-	vars    {{.VariablesType}}
-	opts    []ExpectOption
+	handler   *TestHandler
+	vars      {{.VariablesType}}
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *{{.BuilderTypeName}}) register(resp {{.ResultInterface}}) {
+	if b.isDefault {
+		b.handler.{{.ExpectationField}}.setDefault(resp)
+		return
+	}
+	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
 }
 
 // Respond sets the expectation to return the given data.
 func (b *{{.BuilderTypeName}}) Respond(data {{.ResponseType}}) {
-	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}DataResult{data: data}, b.opts...)
+	b.register({{.LowercaseName}}DataResult{data: data})
 }
 
 // RespondError sets the expectation to return GraphQL errors.
 func (b *{{.BuilderTypeName}}) RespondError(errors ...GraphQLError) {
-	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}ErrorResult{errors: errors}, b.opts...)
+	b.register({{.LowercaseName}}ErrorResult{errors: errors})
 }
 
-// Handle sets the expectation to invoke a custom handler function.
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
 func (b *{{.BuilderTypeName}}) Handle(fn func({{.VariablesType}}, http.ResponseWriter)) {
-	b.handler.{{.ExpectationField}}.expect(b.handler.tb, b.vars, nil, {{.LowercaseName}}RawResult{vars: b.vars, fn: fn}, b.opts...)
+	b.register({{.LowercaseName}}RawResult{fn: fn})
 }
 
 // Expect{{.Name}} sets up an expectation for the {{.Name}} operation.
@@ -90,5 +131,36 @@ func (s *TestHandler) Expect{{.Name}}(vars {{.VariablesType}}, opts ...ExpectOpt
 	}
 }
 
-{{end -}}
+// Default{{.Name}} returns a builder for the default {{.Name}} responder,
+// used when no Expect{{.Name}} matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) Default{{.Name}}() *{{.BuilderTypeName}} {
+	return &{{.BuilderTypeName}}{
+		handler:   s,
+		isDefault: true,
+	}
+}
 
+// Reset{{.Name}} wipes registered expectations for the {{.Name}} operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// Reset{{.Name}} records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) Reset{{.Name}}(vars ...{{.VariablesType}}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.Reset{{.Name}} called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.{{.ExpectationField}}.clear()
+		return
+	}
+	s.{{.ExpectationField}}.clearByRequests(vars)
+}
+
+{{end -}}
