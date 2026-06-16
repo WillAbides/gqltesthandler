@@ -191,12 +191,17 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 				JSONName:    sel.Name,
 			}
 
-			if isObject && len(sel.SelectionSet) > 0 {
+			switch {
+			case isObject && len(sel.SelectionSet) > 0:
 				nestedTypeName := prefix + exportedName(sel.Name)
 				sf.TypeName = nestedTypeName
 				sf.NestedFields = extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
 				sf.GoType = wrapGoType(sel.Definition.Type, nestedTypeName)
-			} else {
+			case sel.Name == "__typename":
+				// The `__typename` meta-field is `String!` (non-null) per the
+				// GraphQL spec, so emit a plain string rather than *string.
+				sf.GoType = "string"
+			default:
 				sf.GoType = goTypeForGraphQL(schema, sel.Definition.Type)
 			}
 
@@ -269,6 +274,14 @@ func scalarGoType(schema *ast.Schema, name string) string {
 func exportedName(s string) string {
 	if s == "" {
 		return s
+	}
+	// GraphQL's `__typename` meta-field is unexported under the default
+	// rune-uppercase rule, which trips go vet's "structtag" check when
+	// emitted alongside a json tag. Mirror genqlient's mapping
+	// (Typename + json:"__typename") so unions/interfaces work without
+	// downstream patching.
+	if s == "__typename" {
+		return "Typename"
 	}
 	// Handle common GraphQL conventions like camelCase
 	runes := []rune(s)
