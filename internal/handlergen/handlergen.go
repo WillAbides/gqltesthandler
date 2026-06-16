@@ -270,6 +270,14 @@ func exportedName(s string) string {
 	if s == "" {
 		return s
 	}
+	// GraphQL's `__typename` meta-field is unexported under the default
+	// rune-uppercase rule, which trips go vet's "structtag" check when
+	// emitted alongside a json tag. Mirror genqlient's mapping
+	// (Typename + json:"__typename") so unions/interfaces work without
+	// downstream patching.
+	if s == "__typename" {
+		return "Typename"
+	}
 	// Handle common GraphQL conventions like camelCase
 	runes := []rune(s)
 	runes[0] = unicode.ToUpper(runes[0])

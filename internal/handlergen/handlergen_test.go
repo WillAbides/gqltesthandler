@@ -26,6 +26,10 @@ func TestRun(t *testing.T) {
 			name:        "with_fragments",
 			testdataDir: "testdata/with_fragments",
 		},
+		{
+			name:        "with_typename",
+			testdataDir: "testdata/with_typename",
+		},
 	}
 
 	for _, test := range tests {
@@ -80,6 +84,24 @@ func assertEqualDir(t *testing.T, expectedDir, actualDir string) {
 			assert.Equal(t, string(expectedContent), string(actualContent), "file contents do not match for %s", filename)
 		}
 	}
+}
+
+func TestExportedName(t *testing.T) {
+	t.Run("__typename becomes Typename", func(t *testing.T) {
+		assert.Equal(t, "Typename", exportedName("__typename"))
+	})
+
+	t.Run("id becomes ID", func(t *testing.T) {
+		assert.Equal(t, "ID", exportedName("id"))
+	})
+
+	t.Run("regular field uppercases first rune", func(t *testing.T) {
+		assert.Equal(t, "Name", exportedName("name"))
+	})
+
+	t.Run("empty string unchanged", func(t *testing.T) {
+		assert.Equal(t, "", exportedName(""))
+	})
 }
 
 // copyDir copies all files from srcDir to dstDir
