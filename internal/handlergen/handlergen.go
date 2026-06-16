@@ -196,6 +196,10 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 				sf.TypeName = nestedTypeName
 				sf.NestedFields = extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
 				sf.GoType = wrapGoType(sel.Definition.Type, nestedTypeName)
+			} else if sel.Name == "__typename" {
+				// The `__typename` meta-field is `String!` (non-null) per the
+				// GraphQL spec, so emit a plain string rather than *string.
+				sf.GoType = "string"
 			} else {
 				sf.GoType = goTypeForGraphQL(schema, sel.Definition.Type)
 			}

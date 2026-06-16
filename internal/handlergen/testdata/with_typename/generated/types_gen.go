@@ -20,8 +20,8 @@ type SearchResponse struct {
 }
 
 type SearchResponseSearch struct {
-	Typename *string `json:"__typename"`
-	ID       string  `json:"id"`
-	Login    string  `json:"login"`
-	Name     string  `json:"name"`
+	Typename string `json:"__typename"`
+	ID       string `json:"id"`
+	Login    string `json:"login"`
+	Name     string `json:"name"`
 }
