@@ -1,0 +1,33 @@
+query Aliases($id: ID!) {
+  profile: user(id: $id) {
+    handle: login
+    email
+    account: org {
+      orgName: name
+    }
+  }
+  kind: __typename
+  results: search(query: "q") {
+    tag: __typename
+    ... on User {
+      entityId: id
+    }
+    ... on Repository {
+      entityId: id
+    }
+    ...RepoFields
+  }
+}
+
+fragment RepoFields on Repository {
+  repoName: name
+}
+
+# Aliases two fields to each other's names: response keys drive Go field
+# names/JSON tags, underlying fields drive types.
+query AliasSwap {
+  pair {
+    foo: bar
+    bar: foo
+  }
+}

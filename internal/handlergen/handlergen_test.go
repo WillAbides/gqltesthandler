@@ -30,6 +30,10 @@ func TestRun(t *testing.T) {
 			name:        "with_typename",
 			testdataDir: "testdata/with_typename",
 		},
+		{
+			name:        "with_aliases",
+			testdataDir: "testdata/with_aliases",
+		},
 	}
 
 	for _, test := range tests {
@@ -84,6 +88,40 @@ func assertEqualDir(t *testing.T, expectedDir, actualDir string) {
 			assert.Equal(t, string(expectedContent), string(actualContent), "file contents do not match for %s", filename)
 		}
 	}
+}
+
+func TestRunAliasConflict(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.graphqls")
+	operationsPath := filepath.Join(dir, "operations.graphql")
+
+	schema := `type Query {
+  user(id: ID!): User
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+`
+	// "name" and the alias "Name" are distinct GraphQL response keys, but both
+	// map to the Go field name "Name", so generation must fail loudly rather
+	// than emit a struct with duplicate fields.
+	operations := `query Collide($id: ID!) {
+  user(id: $id) {
+    name
+    Name: id
+  }
+}
+`
+	require.NoError(t, os.WriteFile(schemaPath, []byte(schema), 0o600))
+	require.NoError(t, os.WriteFile(operationsPath, []byte(operations), 0o600))
+
+	err := Run(schemaPath, operationsPath, filepath.Join(dir, "generated"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `Go field name "Name"`)
+	assert.Contains(t, err.Error(), `"name"`)
+	assert.Contains(t, err.Error(), `"Name"`)
 }
 
 func TestExportedName(t *testing.T) {

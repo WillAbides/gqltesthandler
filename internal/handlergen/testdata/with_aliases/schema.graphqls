@@ -1,0 +1,28 @@
+type Query {
+  user(id: ID!): User
+  search(query: String!): [SearchResult!]!
+  pair: Pair!
+}
+
+union SearchResult = User | Repository
+
+type User {
+  id: ID!
+  login: String!
+  email: String
+  org: Organization!
+}
+
+type Organization {
+  name: String!
+}
+
+type Repository {
+  id: ID!
+  name: String!
+}
+
+type Pair {
+  foo: Int!
+  bar: String!
+}
