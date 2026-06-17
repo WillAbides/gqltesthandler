@@ -1,0 +1,41 @@
+# Exercises list / nullability combinations over an interface (abstract) type,
+# plus an abstract selection of only __typename. Current behavior:
+#   [Node!]!  -> []T          (non-null list, non-null elems)
+#   [Node]    -> []*T         (nullable elems become pointers)
+#   [Node!]   -> []T          (outer-list nullability never adds a pointer)
+#   [Node]!   -> []*T         (nullable elems become pointers)
+#   Node      -> *T           (nullable single)
+#   Node!     -> T            (non-null single)
+# and an only-__typename selection yields a struct with a single Typename field.
+query Abstracts {
+  nonNullList {
+    __typename
+    id
+    ... on User {
+      login
+    }
+  }
+  nullableElems {
+    __typename
+    id
+  }
+  nullableList {
+    __typename
+    id
+  }
+  outerNonNull {
+    __typename
+    id
+  }
+  oneNullable {
+    __typename
+    id
+  }
+  oneNonNull {
+    __typename
+    id
+  }
+  onlyTypename {
+    __typename
+  }
+}

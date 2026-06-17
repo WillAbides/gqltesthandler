@@ -1,0 +1,20 @@
+type Query {
+  feed: [FeedItem!]!
+}
+
+union FeedItem = Article | Ad
+
+interface Authored {
+  author: String!
+}
+
+type Article implements Authored {
+  id: ID!
+  author: String!
+  title: String!
+}
+
+type Ad {
+  id: ID!
+  sponsor: String!
+}

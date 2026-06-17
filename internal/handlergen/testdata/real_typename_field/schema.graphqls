@@ -1,0 +1,9 @@
+type Query {
+  widget(id: ID!): Widget
+}
+
+type Widget {
+  id: ID!
+  typename: String!
+  child: Widget
+}

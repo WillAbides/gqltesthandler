@@ -1,0 +1,21 @@
+# Exercises @include / @skip directives on fields, inline fragments, and a
+# fragment spread. The generator ignores directives entirely: every selected
+# field is emitted in the flattened response struct regardless of @include /
+# @skip, and non-null fields stay non-pointer even though a skipped field would
+# be absent in a real response. This fixture pins that current behavior.
+query Search($query: String!, $withName: Boolean!, $skipLogin: Boolean!) {
+  search(query: $query) {
+    __typename
+    ... on User @include(if: $withName) {
+      id
+      login @skip(if: $skipLogin)
+      name @include(if: $withName)
+    }
+    ...RepoFields @skip(if: $skipLogin)
+  }
+}
+
+fragment RepoFields on Repository {
+  id
+  name
+}

@@ -1,0 +1,45 @@
+# Exercises overlapping/duplicate field selection and deterministic dedupe.
+#
+# GetUser spreads two fragments on the same concrete type (User) whose field
+# sets overlap (both select id and name). The generator dedupes by GraphQL
+# field name (first occurrence wins), so the flattened struct lists id, name,
+# email exactly once.
+#
+# Search dedupes a field selected on multiple disjoint union members: both
+# Player and Team select id (ID!), which collapses to a single flattened field,
+# while their distinct fields (score, rank) are unioned in.
+#
+# NOTE: a field selected with conflicting types across members (e.g. Int! vs
+# String!) cannot be expressed here — gqlparser's SameResponseShape rule
+# rejects it before generation, so the generator never sees that case.
+query GetUser($id: ID!) {
+  user(id: $id) {
+    ...UserCore
+    ...UserContact
+  }
+}
+
+fragment UserCore on User {
+  id
+  name
+}
+
+fragment UserContact on User {
+  id
+  name
+  email
+}
+
+query Search($query: String!) {
+  search(query: $query) {
+    __typename
+    ... on Player {
+      id
+      score
+    }
+    ... on Team {
+      id
+      rank
+    }
+  }
+}
