@@ -116,8 +116,7 @@ func TestGetUser_Default(t *testing.T) {
 		User: &usertest.GetUserResponseUser{ID: "1", Name: "Alice"},
 	})
 
-	// Default handler responds to any other ID using the variables from the
-	// incoming request.
+	// The default receives the incoming request's variables.
 	handler.DefaultGetUser().Handle(func(vars usertest.GetUserVariables, w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
@@ -139,7 +138,7 @@ func TestGetUser_Default(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "user-42", resp2.User.Name)
 
-	// Default is sticky — call it again with another unknown id.
+	// The default is sticky across calls.
 	resp3, err := client.GetUser(t.Context(), "99")
 	require.NoError(t, err)
 	require.Equal(t, "user-99", resp3.User.Name)
@@ -190,7 +189,6 @@ func TestResetGetUser_TargetedWipe(t *testing.T) {
 		User: &usertest.GetUserResponseUser{ID: "1", Name: "strict-1"},
 	})
 
-	// ID "1" gets the strict response.
 	got1, err := client.GetUser(t.Context(), "1")
 	require.NoError(t, err)
 	require.Equal(t, "strict-1", got1.User.Name)
@@ -300,13 +298,11 @@ func TestSearch_Union(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Search, 2)
 
-	// First result resolves to a User.
 	require.NotNil(t, resp.Search[0].Typename)
 	require.Equal(t, "User", *resp.Search[0].Typename)
 	require.Equal(t, "u1", resp.Search[0].User.ID)
 	require.Equal(t, "Alice", resp.Search[0].User.Name)
 
-	// Second result resolves to a Post.
 	require.NotNil(t, resp.Search[1].Typename)
 	require.Equal(t, "Post", *resp.Search[1].Typename)
 	require.Equal(t, "p1", resp.Search[1].Post.ID)
@@ -353,11 +349,9 @@ func TestGetNode_InterfacePostVariant(t *testing.T) {
 	require.Equal(t, "Hello", resp.Node.Post.Title)
 }
 
-// postRawGraphQL sends a hand-built GraphQL request so a test can decouple the
-// query string actually sent over the wire from the checked-in operation file.
-// This lets a test omit __typename from the wire query and prove the handler
-// injects the discriminator anyway — injection is unconditional, not
-// request-driven.
+// postRawGraphQL sends a hand-built GraphQL request, decoupling the wire query
+// from the checked-in operation file so a test can omit __typename and prove the
+// handler injects the discriminator anyway (injection is unconditional).
 func postRawGraphQL(t *testing.T, url, query, operationName string, variables map[string]any) string {
 	t.Helper()
 	reqBody, err := json.Marshal(map[string]any{
@@ -374,9 +368,8 @@ func postRawGraphQL(t *testing.T, url, query, operationName string, variables ma
 	return string(out)
 }
 
-// TestTypename_InjectedWhenGenqlientClientSelectsIt mirrors a genqlient-style
-// request that selects __typename for the abstract node field. The handler
-// always emits the discriminator, so the client gets it back to discriminate.
+// TestTypename_InjectedWhenGenqlientClientSelectsIt: a genqlient-style request
+// selects __typename, and the handler emits the discriminator back.
 func TestTypename_InjectedWhenGenqlientClientSelectsIt(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -386,8 +379,7 @@ func TestTypename_InjectedWhenGenqlientClientSelectsIt(t *testing.T) {
 		Node: usertest.GetNodeResponseNodeUser{ID: "u1", Name: "Alice", Email: "alice@example.com"},
 	})
 
-	// genqlient-style request: __typename is present in the wire query even
-	// though operations.graphql for GetNode does not list it.
+	// Wire query selects __typename even though GetNode's operation file omits it.
 	query := `query GetNode($id: ID!) {
 	  node(id: $id) {
 	    __typename
@@ -401,9 +393,8 @@ func TestTypename_InjectedWhenGenqlientClientSelectsIt(t *testing.T) {
 	require.Contains(t, body, `"name":"Alice"`)
 }
 
-// TestTypename_InjectedEvenWhenRequestOmitsIt is the core policy assertion: even
-// when the wire query omits __typename, the concrete variant still serializes
-// it. Injection is unconditional, not request-driven.
+// TestTypename_InjectedEvenWhenRequestOmitsIt is the core policy assertion: the
+// concrete variant serializes __typename even when the wire query omits it.
 func TestTypename_InjectedEvenWhenRequestOmitsIt(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -426,8 +417,7 @@ func TestTypename_InjectedEvenWhenRequestOmitsIt(t *testing.T) {
 }
 
 // TestTypename_InjectedForUnionWhenRequestOmitsIt is the union counterpart: a
-// Search request that omits __typename still gets the discriminator injected on
-// every union member.
+// Search omitting __typename still gets it injected on every union member.
 func TestTypename_InjectedForUnionWhenRequestOmitsIt(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -450,9 +440,8 @@ func TestTypename_InjectedForUnionWhenRequestOmitsIt(t *testing.T) {
 	require.Contains(t, body, `"name":"Alice"`)
 }
 
-// TestTypename_NestedInjection exercises a nested abstract field
-// (GetNodeRelated: node -> Post.related -> Node). Injection recurses to every
-// abstract level regardless of whether the incoming query selected __typename.
+// TestTypename_NestedInjection: injection recurses to every abstract level
+// (GetNodeRelated: node -> Post.related -> Node) regardless of the wire query.
 func TestTypename_NestedInjection(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -510,9 +499,8 @@ func TestTypename_NestedInjection(t *testing.T) {
 	require.Contains(t, body2, `"name":"Alice"`)
 }
 
-// TestTypename_ListStructureIncludesDiscriminator proves the always-injected
-// discriminator appears on every element of an abstract list while leaving the
-// rest of the structure intact.
+// TestTypename_ListStructureIncludesDiscriminator proves the discriminator
+// appears on every element of an abstract list, leaving the rest intact.
 func TestTypename_ListStructureIncludesDiscriminator(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -545,12 +533,9 @@ func TestTypename_ListStructureIncludesDiscriminator(t *testing.T) {
 	}, got)
 }
 
-// TestTypename_SingleFragmentInjectsDiscriminator covers an abstract field with
-// exactly one concrete type condition: GetNodeAsUser selects only ... on User
-// and its operation omits __typename. The single fragment is still modeled
-// polymorphically (a discriminator interface plus a User variant), so the
-// handler injects __typename even though neither the operation file nor the
-// wire query selected it.
+// TestTypename_SingleFragmentInjectsDiscriminator covers the threshold policy: a
+// single narrowing fragment (... on User) is still modeled polymorphically, so
+// the handler injects __typename even though the operation omits it.
 func TestTypename_SingleFragmentInjectsDiscriminator(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -572,12 +557,9 @@ func TestTypename_SingleFragmentInjectsDiscriminator(t *testing.T) {
 }
 
 // TestTypename_FlatAbstractTypedDiscriminator covers a shared-only abstract
-// selection (GetNodeShared selects `node { id }` with no type conditions and no
-// __typename). The selection stays a single flat struct, but the struct carries
-// a typed, settable Typename discriminator. A genqlient-style fixture sets it to
-// emit the __typename genqlient injects and requires; a fixture that leaves it
-// unset emits no __typename (so a strict decoder that did not select it still
-// accepts the response).
+// selection: it stays a single flat struct but carries a typed, settable
+// Typename. Setting it emits the __typename genqlient requires; leaving it unset
+// emits none, so a strict decoder that did not select it still accepts the response.
 func TestTypename_FlatAbstractTypedDiscriminator(t *testing.T) {
 	handler := usertest.NewTestHandler(t)
 	server := httptest.NewServer(handler)
@@ -608,14 +590,11 @@ func TestTypename_FlatAbstractTypedDiscriminator(t *testing.T) {
 	require.Contains(t, withoutTypename, `"id":"u2"`)
 }
 
-// TestTypename_VariantRealTypenameFieldCoexists proves that a concrete variant
-// selecting a real field literally named `typename` is safe even though the
-// variant's MarshalJSON also injects the `__typename` discriminator. The injected
-// discriminator goes through an alias embed, so it serializes under a distinct
-// JSON key from the real `typename` struct field and both are emitted. (A flat
-// abstract struct in the same situation is a hard error — see
-// TestRun_TypenameFieldConflict in internal/handlergen — because there the two
-// would be sibling struct fields with the same Go name.)
+// TestTypename_VariantRealTypenameFieldCoexists proves a variant selecting a real
+// `typename` field is safe alongside the MarshalJSON-injected `__typename`: the
+// injection goes through an alias embed, so the two serialize under distinct JSON
+// keys. The flat-struct equivalent is instead a hard error (see
+// TestRun_SynthesizedTypenameConflict), since there they'd be sibling Go fields.
 func TestTypename_VariantRealTypenameFieldCoexists(t *testing.T) {
 	realTypename := "custom"
 	variant := usertest.GetUserTypenameResponseNodeUser{Typename: &realTypename, Name: "Alice"}

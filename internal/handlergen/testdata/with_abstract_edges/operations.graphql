@@ -1,8 +1,8 @@
-# ZeroFragment: an abstract field selecting only a shared field, with no type
-# conditions at all and no __typename in the operation text. It stays a single
-# flat struct, but the struct still carries a typed, settable __typename
-# discriminator (NodeTypename) so a genqlient-style fixture can emit the
-# __typename genqlient injects and requires for every abstract field.
+# ZeroFragment: an abstract field selecting only a shared field — no type
+# conditions, no __typename in the operation. It stays a single flat struct that
+# still carries a typed, settable __typename discriminator (NodeTypename) so a
+# fixture can emit the __typename genqlient injects and requires for every
+# abstract field.
 query ZeroFragment($id: ID!) {
   node(id: $id) {
     id
@@ -10,10 +10,9 @@ query ZeroFragment($id: ID!) {
 }
 
 # ExplicitTypename: a shared-only abstract selection that explicitly selects
-# __typename. It stays a single flat struct, but because the operation text asked
-# for __typename the typed discriminator is emitted with a plain json:"__typename"
-# tag (no omitempty), so the field is always present — matching the GraphQL
-# request shape — rather than being a synthesized opt-in field.
+# __typename, so the typed discriminator keeps a plain json:"__typename" tag (no
+# omitempty) and is always present — matching the request shape — rather than a
+# synthesized opt-in field.
 query ExplicitTypename($id: ID!) {
   node(id: $id) {
     __typename
@@ -21,11 +20,10 @@ query ExplicitTypename($id: ID!) {
   }
 }
 
-# SingleVariant: exactly one concrete type condition on an abstract field, and
-# the operation omits __typename. The selection is modeled polymorphically (a
-# discriminator interface plus a single User variant whose MarshalJSON injects
-# __typename), matching genqlient, which injects __typename for any abstract
-# selection it must discriminate.
+# SingleVariant: exactly one concrete type condition, operation omits __typename.
+# Still modeled polymorphically (a discriminator interface plus a single User
+# variant whose MarshalJSON injects __typename), matching genqlient — any
+# narrowing fragment discriminates.
 query SingleVariant($id: ID!) {
   node(id: $id) {
     id
@@ -36,9 +34,8 @@ query SingleVariant($id: ID!) {
 }
 
 # SharedSpread: a fragment spread whose type condition is the same abstract type
-# as the parent (Node), so it does not narrow the possible-type set. Its fields
-# are shared, and the selection stays a single flat struct rather than expanding
-# to one variant per possible type. The flat struct still carries the typed
+# as the parent (Node) does not narrow, so its fields are shared and the
+# selection stays a single flat struct (no variant explosion) with the typed
 # __typename discriminator for genqlient compatibility.
 query SharedSpread($id: ID!) {
   node(id: $id) {

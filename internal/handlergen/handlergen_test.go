@@ -202,13 +202,10 @@ func TestExportedName(t *testing.T) {
 	})
 }
 
-// TestRun_SynthesizedTypenameConflict pins that a flat (shared-only) abstract
-// selection whose synthesized __typename discriminator collides with another
-// response key mapping to Go field `Typename` fails generation, naming the
-// colliding response keys. The discriminator is added after extractSelectionFields
-// runs, so its response-key collision check cannot catch it; withFlatTypename
-// reports it instead. The explicit-__typename and plain alias collisions are
-// already covered by TestTypenameCollision and TestRunAliasConflict.
+// TestRun_SynthesizedTypenameConflict pins that a synthesized flat __typename
+// discriminator colliding with another response key on Go field `Typename`
+// fails generation. withFlatTypename reports this, since it runs after
+// extractSelectionFields' own collision check.
 func TestRun_SynthesizedTypenameConflict(t *testing.T) {
 	schema := `type Query {
   node(id: ID!): Node
@@ -226,13 +223,12 @@ type User implements Node {
 	tests := []struct {
 		name       string
 		operations string
-		// wantKey is the response key the error must report for the existing
-		// field. For an alias it is the alias, not the underlying field name.
+		// wantKey is the response key the error must report — for an alias the
+		// alias itself, not the underlying field name.
 		wantKey string
 	}{
 		{
-			// A real `typename` field: its response key equals its field name, so
-			// the synthesized discriminator collides on response key "typename".
+			// Real `typename`: response key equals the field name.
 			name: "real typename field",
 			operations: `query Q($id: ID!) {
   node(id: $id) {
@@ -244,9 +240,8 @@ type User implements Node {
 			wantKey: "typename",
 		},
 		{
-			// `Typename: id` aliases id to response key "Typename", which collides
-			// with the synthesized discriminator by response key. The error must
-			// name the alias "Typename", not the underlying field "id".
+			// `Typename: id` collides by response key, so the error must name the
+			// alias "Typename", not the underlying field "id".
 			name: "aliased response key",
 			operations: `query Q($id: ID!) {
   node(id: $id) {

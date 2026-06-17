@@ -160,13 +160,13 @@ concrete type reached by a narrowing type condition, instead of flattening every
 fragment's fields into a single struct. This makes invalid field combinations
 unrepresentable — you build a fixture by choosing the concrete variant you want.
 
-Given a union `search: [SearchResult!]!` where `SearchResult = User | Repository`:
+Given a union `search: [SearchResult!]!` where `SearchResult = User | Post`:
 
 ```go
-handler.ExpectSearch(usertest.SearchVariables{Query: "go"}).Respond(usertest.SearchResponse{
+handler.ExpectSearch(usertest.SearchVariables{Term: "go"}).Respond(usertest.SearchResponse{
     Search: []usertest.SearchResponseSearch{
-        usertest.SearchResponseSearchUser{ID: "1", Login: "alice"},
-        usertest.SearchResponseSearchRepository{ID: "2", Name: "gqltesthandler"},
+        usertest.SearchResponseSearchUser{ID: "1", Name: "alice"},
+        usertest.SearchResponseSearchPost{ID: "2", Title: "gqltesthandler"},
     },
 })
 ```

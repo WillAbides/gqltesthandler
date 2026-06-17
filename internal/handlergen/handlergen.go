@@ -169,18 +169,15 @@ type selectionField struct {
 	NestedFields []selectionField
 	TypeName     string // for nested object types, the generated struct name
 
-	// TypenameValues, when non-empty, marks this field as the synthesized
-	// __typename discriminator of a flat abstract struct. GoType names the
-	// generated `type <Struct>Typename string`, and these are the concrete
-	// type names emitted as its constants.
+	// TypenameValues, when set, marks this field as the synthesized __typename
+	// discriminator of a flat abstract struct and lists its constant values.
 	TypenameValues []string
 
-	// Abstract (interface/union) selections with at least one narrowing type
-	// condition are modeled as a discriminator interface plus one struct per
-	// concrete type. The fields below are populated only when IsAbstract is true.
+	// IsAbstract marks an interface/union selection modeled as a discriminator
+	// interface plus one variant struct per narrowing concrete type.
 	IsAbstract     bool
-	InterfaceName  string // generated interface type name
-	SentinelMethod string // unexported marker method closing the interface
+	InterfaceName  string
+	SentinelMethod string
 	Variants       []abstractVariant
 }
 
@@ -213,9 +210,8 @@ func extractSelectionFields(schema *ast.Schema, selSet ast.SelectionSet, prefix 
 	return fields, nil
 }
 
-// extractSelectionFieldsInto dedupes selections by response key and fails when
-// two distinct keys map to the same Go field name, so generated structs never
-// get duplicate fields.
+// extractSelectionFieldsInto fails when two response keys map to the same Go
+// field name, which would produce duplicate struct fields.
 func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, prefix string, fields *[]selectionField, seen map[string]bool, goNames map[string]string) error {
 	for _, sel := range selSet {
 		switch sel := sel.(type) {
@@ -295,17 +291,11 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 	return nil
 }
 
-// withFlatTypename adds a typed `__typename` discriminator to a flat abstract
-// response struct. genqlient injects `__typename` for every interface/union
-// field — even a shared-only `node { id }` — and requires it back to
-// discriminate, so the flat struct needs a settable `<Struct>Typename` field.
-//
-// An explicitly selected `__typename` is replaced in place and keeps a plain
-// `json:"__typename"` (always present); a synthesized one (operation omitted it)
-// is tagged `omitempty` so a fixture stays silent for strict decoders or sets it
-// for genqlient. Synthesizing can collide with a real `typename` field (both map
-// to Go field `Typename`); extraction can't catch that because the discriminator
-// is added afterward, so the collision is reported here.
+// withFlatTypename adds a settable `<Struct>Typename` discriminator to a flat
+// abstract struct, since genqlient injects and requires `__typename` for every
+// interface/union field. An explicit `__typename` is replaced in place; a
+// synthesized one uses `omitempty` so fixtures can stay silent. A synthesized
+// discriminator that collides with a real `typename` field is rejected here.
 func withFlatTypename(schema *ast.Schema, abstractType, structName string, fields []selectionField) ([]selectionField, error) {
 	typenameField := selectionField{
 		GraphQLName:    "__typename",
@@ -329,19 +319,12 @@ func withFlatTypename(schema *ast.Schema, abstractType, structName string, field
 	return append([]selectionField{typenameField}, fields...), nil
 }
 
-// buildAbstractField models an interface/union field selection as a
-// discriminator interface plus one variant struct per concrete type the
-// selection distinguishes. A fragment's fields belong only to the concrete types
-// in `parentPossibleTypes ∩ conditionPossibleTypes`; fields selected directly on
-// the abstract field — and fragments that do not narrow it (`cond == applicable`)
-// — are shared across every variant, so a field under one interface fragment
-// never leaks onto a sibling variant.
-//
-// The polymorphic shape is used when at least one fragment narrows the parent's
-// possible types to a proper subset (genqlient injects __typename for those, so a
-// single narrowing fragment is enough). A shared-only selection (no narrowing
-// fragment) returns false and the caller emits one flat struct instead of one
-// variant per possible type.
+// buildAbstractField models an interface/union selection as a discriminator
+// interface plus one variant struct per narrowing concrete type. A fragment's
+// fields attach only to its possible types (the intersection with the parent's),
+// so they never leak onto sibling variants; fields selected directly on the
+// abstract field are shared across every variant. A selection with no narrowing
+// fragment returns false, and the caller emits a single flat struct instead.
 func buildAbstractField(schema *ast.Schema, sel *ast.Field, prefix string) (selectionField, bool, error) {
 	parentOrdered := possibleConcreteTypes(schema, sel.Definition.Type.Name())
 	parentSet := typeSet(parentOrdered)
@@ -365,11 +348,8 @@ func buildAbstractField(schema *ast.Schema, sel *ast.Field, prefix string) (sele
 		for _, s := range selSet {
 			switch s := s.(type) {
 			case *ast.Field:
-				// An un-aliased __typename is the injected discriminator, so it
-				// is never stored as a struct field — each variant's MarshalJSON
-				// injects it unconditionally at marshal time. An *aliased*
-				// __typename (e.g. `tag: __typename`) is a normal response key
-				// the client asked for, so it flows through like any other field.
+				// Unaliased __typename is injected by each variant's MarshalJSON;
+				// an aliased one (`tag: __typename`) stays a normal response key.
 				if s.Name == "__typename" && responseKey(s) == "__typename" {
 					continue
 				}

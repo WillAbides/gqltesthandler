@@ -1,19 +1,13 @@
-# Exercises overlapping/duplicate field selection and deterministic dedupe.
+# GetUser spreads two overlapping fragments on the concrete type User; the
+# generator dedupes by GraphQL field name (first occurrence wins), so id, name,
+# email each appear once.
 #
-# GetUser spreads two fragments on the same concrete type (User) whose field
-# sets overlap (both select id and name). The generator dedupes by GraphQL
-# field name (first occurrence wins), so the flattened struct lists id, name,
-# email exactly once.
-#
-# Search selects a union with narrowing fragments on each member, so it is
-# modeled polymorphically: one variant struct per member. id is selected inside
-# each member fragment, so each variant carries its own id alongside its
-# distinct field (score, rank) — there is no cross-member collapse in the
-# polymorphic shape.
+# Search selects a union with a narrowing fragment per member, so each variant
+# carries its own id with no cross-member collapse.
 #
 # NOTE: a field selected with conflicting types across members (e.g. Int! vs
-# String!) cannot be expressed here — gqlparser's SameResponseShape rule
-# rejects it before generation, so the generator never sees that case.
+# String!) cannot be expressed here — gqlparser's SameResponseShape rule rejects
+# it before generation, so the generator never sees that case.
 query GetUser($id: ID!) {
   user(id: $id) {
     ...UserCore

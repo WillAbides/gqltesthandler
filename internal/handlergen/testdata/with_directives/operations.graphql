@@ -1,10 +1,9 @@
-# Exercises @include / @skip directives on fields, inline fragments, and a
+# Exercises @include / @skip directives on fields, an inline fragment, and a
 # fragment spread. The generator ignores directives entirely: every selected
 # field is emitted regardless of @include / @skip, and non-null fields stay
 # non-pointer even though a skipped field would be absent in a real response.
-# Because the selection narrows the union via concrete fragments, it is modeled
-# polymorphically (one variant struct per member); this fixture pins that the
-# directives do not change which fields each variant carries.
+# This fixture pins that directives do not change which fields each variant
+# carries.
 query Search($query: String!, $withName: Boolean!, $skipLogin: Boolean!) {
   search(query: $query) {
     __typename
