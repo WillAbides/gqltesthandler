@@ -1,15 +1,31 @@
 type Query {
   user(id: ID!): User
+  node(id: ID!): Node
+  search(term: String!): [SearchResult!]!
 }
 
 type Mutation {
   createUser(input: CreateUserInput!): User!
 }
 
-type User {
+interface Node {
   id: ID!
+}
+
+union SearchResult = User | Post
+
+type User implements Node {
+  id: ID!
+  typename: String
   name: String!
   email: String!
+}
+
+type Post implements Node {
+  id: ID!
+  title: String!
+  author: User!
+  related: Node
 }
 
 input CreateUserInput {

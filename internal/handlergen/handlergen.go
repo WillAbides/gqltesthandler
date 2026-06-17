@@ -165,8 +165,32 @@ type selectionField struct {
 	GoName       string
 	GoType       string
 	JSONName     string
+	OmitEmpty    bool
 	NestedFields []selectionField
 	TypeName     string // for nested object types, the generated struct name
+
+	// TypenameValues, when non-empty, marks this field as the synthesized
+	// __typename discriminator of a flat abstract struct. GoType names the
+	// generated `type <Struct>Typename string`, and these are the concrete
+	// type names emitted as its constants.
+	TypenameValues []string
+
+	// Abstract (interface/union) selections with at least one narrowing type
+	// condition are modeled as a discriminator interface plus one struct per
+	// concrete type. The fields below are populated only when IsAbstract is true.
+	IsAbstract     bool
+	InterfaceName  string // generated interface type name
+	SentinelMethod string // unexported marker method closing the interface
+	Variants       []abstractVariant
+}
+
+// abstractVariant is one concrete type condition of an abstract selection.
+type abstractVariant struct {
+	GraphQLType    string // concrete GraphQL type name, also the __typename value
+	StructName     string // generated struct name
+	InterfaceName  string // interface this variant implements
+	SentinelMethod string // marker method to implement
+	Fields         []selectionField
 }
 
 // responseKey is the alias when present, else the field name. GraphQL keys
@@ -209,7 +233,19 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 			goNames[goName] = key
 
 			typeDef := schema.Types[sel.Definition.Type.Name()]
-			isObject := typeDef != nil && (typeDef.Kind == ast.Object || typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
+			isComposite := typeDef != nil && (typeDef.Kind == ast.Object || typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
+			isAbstract := typeDef != nil && (typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
+
+			if isAbstract && len(sel.SelectionSet) > 0 {
+				abstractField, ok, abErr := buildAbstractField(schema, sel, prefix)
+				if abErr != nil {
+					return abErr
+				}
+				if ok {
+					*fields = append(*fields, abstractField)
+					continue
+				}
+			}
 
 			sf := selectionField{
 				GraphQLName: sel.Name,
@@ -218,7 +254,7 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 			}
 
 			switch {
-			case isObject && len(sel.SelectionSet) > 0:
+			case isComposite && len(sel.SelectionSet) > 0:
 				nestedTypeName := prefix + goName
 				sf.TypeName = nestedTypeName
 				nested, err := extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
@@ -227,6 +263,12 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 				}
 				sf.NestedFields = nested
 				sf.GoType = wrapGoType(sel.Definition.Type, nestedTypeName)
+				if isAbstract {
+					sf.NestedFields, err = withFlatTypename(schema, sel.Definition.Type.Name(), nestedTypeName, sf.NestedFields)
+					if err != nil {
+						return err
+					}
+				}
 			case sel.Name == "__typename":
 				// The `__typename` meta-field is `String!` (non-null) per the
 				// GraphQL spec, so emit a plain string rather than *string.
@@ -251,6 +293,218 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 		}
 	}
 	return nil
+}
+
+// withFlatTypename adds a typed `__typename` discriminator to a flat abstract
+// response struct. genqlient injects `__typename` for every interface/union
+// field — even a shared-only `node { id }` — and requires it back to
+// discriminate, so the flat struct needs a settable `<Struct>Typename` field.
+//
+// An explicitly selected `__typename` is replaced in place and keeps a plain
+// `json:"__typename"` (always present); a synthesized one (operation omitted it)
+// is tagged `omitempty` so a fixture stays silent for strict decoders or sets it
+// for genqlient. Synthesizing can collide with a real `typename` field (both map
+// to Go field `Typename`); extraction can't catch that because the discriminator
+// is added afterward, so the collision is reported here.
+func withFlatTypename(schema *ast.Schema, abstractType, structName string, fields []selectionField) ([]selectionField, error) {
+	typenameField := selectionField{
+		GraphQLName:    "__typename",
+		GoName:         "Typename",
+		GoType:         structName + "Typename",
+		JSONName:       "__typename",
+		TypenameValues: possibleConcreteTypes(schema, abstractType),
+	}
+	for i, f := range fields {
+		if f.JSONName == "__typename" {
+			fields[i] = typenameField
+			return fields, nil
+		}
+	}
+	for _, f := range fields {
+		if f.GoName == typenameField.GoName {
+			return nil, fmt.Errorf("response keys %q and %q both map to Go field name %q in %s", f.JSONName, typenameField.JSONName, typenameField.GoName, structName)
+		}
+	}
+	typenameField.OmitEmpty = true
+	return append([]selectionField{typenameField}, fields...), nil
+}
+
+// buildAbstractField models an interface/union field selection as a
+// discriminator interface plus one variant struct per concrete type the
+// selection distinguishes. A fragment's fields belong only to the concrete types
+// in `parentPossibleTypes ∩ conditionPossibleTypes`; fields selected directly on
+// the abstract field — and fragments that do not narrow it (`cond == applicable`)
+// — are shared across every variant, so a field under one interface fragment
+// never leaks onto a sibling variant.
+//
+// The polymorphic shape is used when at least one fragment narrows the parent's
+// possible types to a proper subset (genqlient injects __typename for those, so a
+// single narrowing fragment is enough). A shared-only selection (no narrowing
+// fragment) returns false and the caller emits one flat struct instead of one
+// variant per possible type.
+func buildAbstractField(schema *ast.Schema, sel *ast.Field, prefix string) (selectionField, bool, error) {
+	parentOrdered := possibleConcreteTypes(schema, sel.Definition.Type.Name())
+	parentSet := typeSet(parentOrdered)
+
+	var shared ast.SelectionSet
+	var order []string
+	seen := map[string]bool{}
+	variantSels := map[string]ast.SelectionSet{}
+
+	recordOrder := func(applicable map[string]bool) {
+		for _, t := range parentOrdered {
+			if applicable[t] && !seen[t] {
+				seen[t] = true
+				order = append(order, t)
+			}
+		}
+	}
+
+	var walk func(selSet ast.SelectionSet, applicable map[string]bool, parentScope bool)
+	walk = func(selSet ast.SelectionSet, applicable map[string]bool, parentScope bool) {
+		for _, s := range selSet {
+			switch s := s.(type) {
+			case *ast.Field:
+				// An un-aliased __typename is the injected discriminator, so it
+				// is never stored as a struct field — each variant's MarshalJSON
+				// injects it unconditionally at marshal time. An *aliased*
+				// __typename (e.g. `tag: __typename`) is a normal response key
+				// the client asked for, so it flows through like any other field.
+				if s.Name == "__typename" && responseKey(s) == "__typename" {
+					continue
+				}
+				if parentScope {
+					shared = append(shared, s)
+					continue
+				}
+				for _, t := range parentOrdered {
+					if applicable[t] {
+						variantSels[t] = append(variantSels[t], s)
+					}
+				}
+			case *ast.InlineFragment:
+				cond := intersectTypes(applicable, possibleConcreteTypes(schema, s.TypeCondition))
+				if sameTypeSet(cond, applicable) {
+					walk(s.SelectionSet, applicable, parentScope)
+					continue
+				}
+				recordOrder(cond)
+				walk(s.SelectionSet, cond, false)
+			case *ast.FragmentSpread:
+				if s.Definition == nil {
+					continue
+				}
+				cond := intersectTypes(applicable, possibleConcreteTypes(schema, s.Definition.TypeCondition))
+				if sameTypeSet(cond, applicable) {
+					walk(s.Definition.SelectionSet, applicable, parentScope)
+					continue
+				}
+				recordOrder(cond)
+				walk(s.Definition.SelectionSet, cond, false)
+			}
+		}
+	}
+	walk(sel.SelectionSet, parentSet, true)
+
+	if len(order) == 0 {
+		return selectionField{}, false, nil
+	}
+
+	key := responseKey(sel)
+	interfaceName := prefix + exportedName(key)
+	sentinel := "is" + interfaceName
+
+	sf := selectionField{
+		GraphQLName:    sel.Name,
+		GoName:         exportedName(key),
+		JSONName:       key,
+		GoType:         wrapInterfaceGoType(sel.Definition.Type, interfaceName),
+		IsAbstract:     true,
+		InterfaceName:  interfaceName,
+		SentinelMethod: sentinel,
+	}
+
+	for _, typeCond := range order {
+		structName := interfaceName + exportedName(typeCond)
+
+		combined := make(ast.SelectionSet, 0, len(shared)+len(variantSels[typeCond]))
+		combined = append(combined, shared...)
+		combined = append(combined, variantSels[typeCond]...)
+
+		variantFields, err := extractSelectionFields(schema, combined, structName)
+		if err != nil {
+			return selectionField{}, false, err
+		}
+		sf.Variants = append(sf.Variants, abstractVariant{
+			GraphQLType:    typeCond,
+			StructName:     structName,
+			InterfaceName:  interfaceName,
+			SentinelMethod: sentinel,
+			Fields:         variantFields,
+		})
+	}
+
+	return sf, true, nil
+}
+
+// possibleConcreteTypes returns, in schema declaration order, the names of the
+// concrete object types a type condition can resolve to: the object itself for
+// an object type, the implementors for an interface, and the members for a
+// union.
+func possibleConcreteTypes(schema *ast.Schema, name string) []string {
+	def := schema.Types[name]
+	if def == nil {
+		return nil
+	}
+	var out []string
+	for _, pt := range schema.GetPossibleTypes(def) {
+		if pt.Kind == ast.Object {
+			out = append(out, pt.Name)
+		}
+	}
+	return out
+}
+
+func typeSet(names []string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	return set
+}
+
+// intersectTypes returns the subset of condTypes that are also in applicable.
+func intersectTypes(applicable map[string]bool, condTypes []string) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range condTypes {
+		if applicable[t] {
+			out[t] = true
+		}
+	}
+	return out
+}
+
+// sameTypeSet reports whether two concrete-type sets have identical membership.
+func sameTypeSet(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for t := range a {
+		if !b[t] {
+			return false
+		}
+	}
+	return true
+}
+
+// wrapInterfaceGoType wraps an interface-typed selection. Interfaces are nilable
+// in Go, so a nil value already represents a null response and no pointer is
+// added; list nesting is preserved.
+func wrapInterfaceGoType(gqlType *ast.Type, goTypeName string) string {
+	if gqlType.Elem != nil {
+		return "[]" + wrapInterfaceGoType(gqlType.Elem, goTypeName)
+	}
+	return goTypeName
 }
 
 // wrapGoType wraps a named type with pointer/slice based on the GraphQL type's nullability and list nesting.
@@ -354,18 +608,55 @@ func buildTypes(ops []operationData, schema *ast.Schema, packageName string) (st
 	// Collect all input types and enums referenced by operations
 	inputTypes := collectInputTypes(ops, schema)
 	enumTypes := collectEnumTypes(ops, schema)
+	typenameTypes := collectTypenameTypes(ops)
 
 	var buf bytes.Buffer
 	err := templates.ExecuteTemplate(&buf, "types.tmpl", map[string]any{
-		"PackageName": packageName,
-		"Operations":  ops,
-		"InputTypes":  inputTypes,
-		"EnumTypes":   enumTypes,
+		"PackageName":   packageName,
+		"Operations":    ops,
+		"InputTypes":    inputTypes,
+		"EnumTypes":     enumTypes,
+		"TypenameTypes": typenameTypes,
 	})
 	if err != nil {
 		return "", fmt.Errorf("executing types template: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// collectTypenameTypes gathers the synthesized `<Struct>Typename` discriminator
+// types of flat abstract structs (see withFlatTypename) so the template can emit
+// each as a defined string plus one constant per possible concrete type. The
+// shape matches enums, so enumTypeData is reused.
+func collectTypenameTypes(ops []operationData) []enumTypeData {
+	seen := map[string]bool{}
+	var result []enumTypeData
+	for _, op := range ops {
+		collectTypenameFromFields(op.ResponseFields, seen, &result)
+	}
+	return result
+}
+
+func collectTypenameFromFields(fields []selectionField, seen map[string]bool, result *[]enumTypeData) {
+	for _, f := range fields {
+		if len(f.TypenameValues) > 0 && !seen[f.GoType] {
+			seen[f.GoType] = true
+			var values []enumValueData
+			for _, v := range f.TypenameValues {
+				values = append(values, enumValueData{
+					GoName: f.GoType + exportedName(v),
+					Value:  v,
+				})
+			}
+			*result = append(*result, enumTypeData{Name: f.GoType, Values: values})
+		}
+		if len(f.NestedFields) > 0 {
+			collectTypenameFromFields(f.NestedFields, seen, result)
+		}
+		for _, v := range f.Variants {
+			collectTypenameFromFields(v.Fields, seen, result)
+		}
+	}
 }
 
 type inputTypeData struct {
@@ -484,6 +775,9 @@ func collectEnumFromFields(schema *ast.Schema, fields []selectionField, seen map
 		collectEnumFromType(schema, f.GoType, seen, result)
 		if len(f.NestedFields) > 0 {
 			collectEnumFromFields(schema, f.NestedFields, seen, result)
+		}
+		for _, v := range f.Variants {
+			collectEnumFromFields(schema, v.Fields, seen, result)
 		}
 	}
 }

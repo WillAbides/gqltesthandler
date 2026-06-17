@@ -1,0 +1,44 @@
+type Query {
+  feed: [FeedItem!]!
+  node(id: ID!): Node
+  entities: [Entity!]!
+}
+
+union FeedItem = Article | Photo
+union Entity = Article | Photo | Person
+
+interface Node {
+  id: ID!
+}
+
+interface Actor {
+  name: String!
+}
+
+interface Timestamped {
+  createdAt: String!
+}
+
+type Article implements Node & Timestamped {
+  id: ID!
+  title: String!
+  author: Actor!
+  createdAt: String!
+}
+
+type Photo implements Node {
+  id: ID!
+  url: String!
+  caption: String
+}
+
+type Person implements Actor & Timestamped {
+  name: String!
+  email: String
+  createdAt: String!
+}
+
+type Org implements Actor {
+  name: String!
+  memberCount: Int!
+}

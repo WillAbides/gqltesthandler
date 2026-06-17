@@ -1,8 +1,10 @@
 package userapi_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -276,4 +278,352 @@ type recordingTB struct {
 func (r *recordingTB) Cleanup(f func()) { r.t.Cleanup(f) }
 func (r *recordingTB) Errorf(format string, args ...any) {
 	r.errors = append(r.errors, fmt.Sprintf(format, args...))
+}
+
+func TestSearch_Union(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	// Fixtures use concrete variant structs; MarshalJSON injects __typename so
+	// the gqlgenc client can discriminate the union members.
+	handler.ExpectSearch(usertest.SearchVariables{Term: "alice"}).Respond(usertest.SearchResponse{
+		Search: []usertest.SearchResponseSearch{
+			usertest.SearchResponseSearchUser{ID: "u1", Name: "Alice"},
+			usertest.SearchResponseSearchPost{ID: "p1", Title: "Hello"},
+		},
+	})
+
+	resp, err := client.Search(t.Context(), "alice")
+	require.NoError(t, err)
+	require.Len(t, resp.Search, 2)
+
+	// First result resolves to a User.
+	require.NotNil(t, resp.Search[0].Typename)
+	require.Equal(t, "User", *resp.Search[0].Typename)
+	require.Equal(t, "u1", resp.Search[0].User.ID)
+	require.Equal(t, "Alice", resp.Search[0].User.Name)
+
+	// Second result resolves to a Post.
+	require.NotNil(t, resp.Search[1].Typename)
+	require.Equal(t, "Post", *resp.Search[1].Typename)
+	require.Equal(t, "p1", resp.Search[1].Post.ID)
+	require.Equal(t, "Hello", resp.Search[1].Post.Title)
+}
+
+func TestGetNode_InterfaceSharedField(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	// The interface field carries a shared `id` plus type-specific fields. The
+	// shared id is promoted onto every concrete variant struct.
+	handler.ExpectGetNode(usertest.GetNodeVariables{ID: "u1"}).Respond(usertest.GetNodeResponse{
+		Node: usertest.GetNodeResponseNodeUser{ID: "u1", Name: "Alice", Email: "alice@example.com"},
+	})
+
+	resp, err := client.GetNode(t.Context(), "u1")
+	require.NoError(t, err)
+	require.Equal(t, "u1", resp.Node.GetID())
+	// The real gqlgenc client decodes the always-injected interface __typename.
+	require.NotNil(t, resp.Node.GetTypename())
+	require.Equal(t, "User", *resp.Node.GetTypename())
+	require.Equal(t, "Alice", resp.Node.User.Name)
+	require.Equal(t, "alice@example.com", resp.Node.User.Email)
+}
+
+func TestGetNode_InterfacePostVariant(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := userclient.NewClient(http.DefaultClient, server.URL, nil)
+
+	handler.ExpectGetNode(usertest.GetNodeVariables{ID: "p1"}).Respond(usertest.GetNodeResponse{
+		Node: usertest.GetNodeResponseNodePost{ID: "p1", Title: "Hello"},
+	})
+
+	resp, err := client.GetNode(t.Context(), "p1")
+	require.NoError(t, err)
+	require.Equal(t, "p1", resp.Node.GetID())
+	require.Equal(t, "Hello", resp.Node.Post.Title)
+}
+
+// postRawGraphQL sends a hand-built GraphQL request so a test can decouple the
+// query string actually sent over the wire from the checked-in operation file.
+// This lets a test omit __typename from the wire query and prove the handler
+// injects the discriminator anyway — injection is unconditional, not
+// request-driven.
+func postRawGraphQL(t *testing.T, url, query, operationName string, variables map[string]any) string {
+	t.Helper()
+	reqBody, err := json.Marshal(map[string]any{
+		"query":         query,
+		"operationName": operationName,
+		"variables":     variables,
+	})
+	require.NoError(t, err)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	out, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return string(out)
+}
+
+// TestTypename_InjectedWhenGenqlientClientSelectsIt mirrors a genqlient-style
+// request that selects __typename for the abstract node field. The handler
+// always emits the discriminator, so the client gets it back to discriminate.
+func TestTypename_InjectedWhenGenqlientClientSelectsIt(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.ExpectGetNode(usertest.GetNodeVariables{ID: "u1"}).Respond(usertest.GetNodeResponse{
+		Node: usertest.GetNodeResponseNodeUser{ID: "u1", Name: "Alice", Email: "alice@example.com"},
+	})
+
+	// genqlient-style request: __typename is present in the wire query even
+	// though operations.graphql for GetNode does not list it.
+	query := `query GetNode($id: ID!) {
+	  node(id: $id) {
+	    __typename
+	    id
+	    ... on User { name email }
+	    ... on Post { title }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, query, "GetNode", map[string]any{"id": "u1"})
+	require.Contains(t, body, `"__typename":"User"`)
+	require.Contains(t, body, `"name":"Alice"`)
+}
+
+// TestTypename_InjectedEvenWhenRequestOmitsIt is the core policy assertion: even
+// when the wire query omits __typename, the concrete variant still serializes
+// it. Injection is unconditional, not request-driven.
+func TestTypename_InjectedEvenWhenRequestOmitsIt(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.ExpectGetNode(usertest.GetNodeVariables{ID: "u1"}).Respond(usertest.GetNodeResponse{
+		Node: usertest.GetNodeResponseNodeUser{ID: "u1", Name: "Alice", Email: "alice@example.com"},
+	})
+
+	query := `query GetNode($id: ID!) {
+	  node(id: $id) {
+	    id
+	    ... on User { name email }
+	    ... on Post { title }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, query, "GetNode", map[string]any{"id": "u1"})
+	require.Contains(t, body, `"__typename":"User"`)
+	require.Contains(t, body, `"name":"Alice"`)
+}
+
+// TestTypename_InjectedForUnionWhenRequestOmitsIt is the union counterpart: a
+// Search request that omits __typename still gets the discriminator injected on
+// every union member.
+func TestTypename_InjectedForUnionWhenRequestOmitsIt(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.ExpectSearch(usertest.SearchVariables{Term: "alice"}).Respond(usertest.SearchResponse{
+		Search: []usertest.SearchResponseSearch{
+			usertest.SearchResponseSearchUser{ID: "u1", Name: "Alice"},
+		},
+	})
+
+	query := `query Search($term: String!) {
+	  search(term: $term) {
+	    ... on User { id name }
+	    ... on Post { id title }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, query, "Search", map[string]any{"term": "alice"})
+	require.Contains(t, body, `"__typename":"User"`)
+	require.Contains(t, body, `"name":"Alice"`)
+}
+
+// TestTypename_NestedInjection exercises a nested abstract field
+// (GetNodeRelated: node -> Post.related -> Node). Injection recurses to every
+// abstract level regardless of whether the incoming query selected __typename.
+func TestTypename_NestedInjection(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.DefaultGetNodeRelated().Respond(usertest.GetNodeRelatedResponse{
+		Node: usertest.GetNodeRelatedResponseNodePost{
+			ID:    "p1",
+			Title: "Hello",
+			Related: usertest.GetNodeRelatedResponseNodePostRelatedUser{
+				ID:   "u1",
+				Name: "Alice",
+			},
+		},
+	})
+
+	withTypename := `query GetNodeRelated($id: ID!) {
+	  node(id: $id) {
+	    __typename
+	    id
+	    ... on User { name }
+	    ... on Post {
+	      title
+	      related {
+	        __typename
+	        id
+	        ... on User { name }
+	        ... on Post { title }
+	      }
+	    }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, withTypename, "GetNodeRelated", map[string]any{"id": "p1"})
+	require.Contains(t, body, `"__typename":"Post"`)
+	require.Contains(t, body, `"__typename":"User"`)
+
+	withoutTypename := `query GetNodeRelated($id: ID!) {
+	  node(id: $id) {
+	    id
+	    ... on User { name }
+	    ... on Post {
+	      title
+	      related {
+	        id
+	        ... on User { name }
+	        ... on Post { title }
+	      }
+	    }
+	  }
+	}`
+	body2 := postRawGraphQL(t, server.URL, withoutTypename, "GetNodeRelated", map[string]any{"id": "p1"})
+	require.Contains(t, body2, `"__typename":"Post"`)
+	require.Contains(t, body2, `"__typename":"User"`)
+	require.Contains(t, body2, `"title":"Hello"`)
+	require.Contains(t, body2, `"name":"Alice"`)
+}
+
+// TestTypename_ListStructureIncludesDiscriminator proves the always-injected
+// discriminator appears on every element of an abstract list while leaving the
+// rest of the structure intact.
+func TestTypename_ListStructureIncludesDiscriminator(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.DefaultSearch().Respond(usertest.SearchResponse{
+		Search: []usertest.SearchResponseSearch{
+			usertest.SearchResponseSearchUser{ID: "u1", Name: "Alice"},
+			usertest.SearchResponseSearchPost{ID: "p1", Title: "Hello"},
+		},
+	})
+
+	query := `query Search($term: String!) {
+	  search(term: $term) {
+	    ... on User { id name }
+	    ... on Post { id title }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, query, "Search", map[string]any{"term": "x"})
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body), &got))
+	require.Equal(t, map[string]any{
+		"data": map[string]any{
+			"search": []any{
+				map[string]any{"__typename": "User", "id": "u1", "name": "Alice"},
+				map[string]any{"__typename": "Post", "id": "p1", "title": "Hello"},
+			},
+		},
+	}, got)
+}
+
+// TestTypename_SingleFragmentInjectsDiscriminator covers an abstract field with
+// exactly one concrete type condition: GetNodeAsUser selects only ... on User
+// and its operation omits __typename. The single fragment is still modeled
+// polymorphically (a discriminator interface plus a User variant), so the
+// handler injects __typename even though neither the operation file nor the
+// wire query selected it.
+func TestTypename_SingleFragmentInjectsDiscriminator(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.ExpectGetNodeAsUser(usertest.GetNodeAsUserVariables{ID: "u1"}).Respond(usertest.GetNodeAsUserResponse{
+		Node: usertest.GetNodeAsUserResponseNodeUser{ID: "u1", Name: "Alice"},
+	})
+
+	query := `query GetNodeAsUser($id: ID!) {
+	  node(id: $id) {
+	    id
+	    ... on User { name }
+	  }
+	}`
+	body := postRawGraphQL(t, server.URL, query, "GetNodeAsUser", map[string]any{"id": "u1"})
+	require.Contains(t, body, `"__typename":"User"`)
+	require.Contains(t, body, `"name":"Alice"`)
+}
+
+// TestTypename_FlatAbstractTypedDiscriminator covers a shared-only abstract
+// selection (GetNodeShared selects `node { id }` with no type conditions and no
+// __typename). The selection stays a single flat struct, but the struct carries
+// a typed, settable Typename discriminator. A genqlient-style fixture sets it to
+// emit the __typename genqlient injects and requires; a fixture that leaves it
+// unset emits no __typename (so a strict decoder that did not select it still
+// accepts the response).
+func TestTypename_FlatAbstractTypedDiscriminator(t *testing.T) {
+	handler := usertest.NewTestHandler(t)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	handler.ExpectGetNodeShared(usertest.GetNodeSharedVariables{ID: "u1"}).Respond(usertest.GetNodeSharedResponse{
+		Node: &usertest.GetNodeSharedResponseNode{
+			Typename: usertest.GetNodeSharedResponseNodeTypenameUser,
+			ID:       "u1",
+		},
+	})
+	handler.ExpectGetNodeShared(usertest.GetNodeSharedVariables{ID: "u2"}).Respond(usertest.GetNodeSharedResponse{
+		Node: &usertest.GetNodeSharedResponseNode{ID: "u2"},
+	})
+
+	query := `query GetNodeShared($id: ID!) {
+	  node(id: $id) {
+	    id
+	  }
+	}`
+
+	withTypename := postRawGraphQL(t, server.URL, query, "GetNodeShared", map[string]any{"id": "u1"})
+	require.Contains(t, withTypename, `"__typename":"User"`)
+	require.Contains(t, withTypename, `"id":"u1"`)
+
+	withoutTypename := postRawGraphQL(t, server.URL, query, "GetNodeShared", map[string]any{"id": "u2"})
+	require.NotContains(t, withoutTypename, `"__typename"`)
+	require.Contains(t, withoutTypename, `"id":"u2"`)
+}
+
+// TestTypename_VariantRealTypenameFieldCoexists proves that a concrete variant
+// selecting a real field literally named `typename` is safe even though the
+// variant's MarshalJSON also injects the `__typename` discriminator. The injected
+// discriminator goes through an alias embed, so it serializes under a distinct
+// JSON key from the real `typename` struct field and both are emitted. (A flat
+// abstract struct in the same situation is a hard error — see
+// TestRun_TypenameFieldConflict in internal/handlergen — because there the two
+// would be sibling struct fields with the same Go name.)
+func TestTypename_VariantRealTypenameFieldCoexists(t *testing.T) {
+	realTypename := "custom"
+	variant := usertest.GetUserTypenameResponseNodeUser{Typename: &realTypename, Name: "Alice"}
+
+	got, err := json.Marshal(variant)
+	require.NoError(t, err)
+
+	require.Contains(t, string(got), `"__typename":"User"`)
+	require.Contains(t, string(got), `"typename":"custom"`)
+	require.Contains(t, string(got), `"name":"Alice"`)
 }

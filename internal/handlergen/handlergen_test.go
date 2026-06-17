@@ -1,6 +1,7 @@
 package handlergen
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,6 +54,14 @@ func TestRun(t *testing.T) {
 		{
 			name:        "real_typename_field",
 			testdataDir: "testdata/real_typename_field",
+		},
+		{
+			name:        "with_interfaces",
+			testdataDir: "testdata/with_interfaces",
+		},
+		{
+			name:        "with_abstract_edges",
+			testdataDir: "testdata/with_abstract_edges",
 		},
 	}
 
@@ -191,6 +200,78 @@ func TestExportedName(t *testing.T) {
 	t.Run("empty string unchanged", func(t *testing.T) {
 		assert.Equal(t, "", exportedName(""))
 	})
+}
+
+// TestRun_SynthesizedTypenameConflict pins that a flat (shared-only) abstract
+// selection whose synthesized __typename discriminator collides with another
+// response key mapping to Go field `Typename` fails generation, naming the
+// colliding response keys. The discriminator is added after extractSelectionFields
+// runs, so its response-key collision check cannot catch it; withFlatTypename
+// reports it instead. The explicit-__typename and plain alias collisions are
+// already covered by TestTypenameCollision and TestRunAliasConflict.
+func TestRun_SynthesizedTypenameConflict(t *testing.T) {
+	schema := `type Query {
+  node(id: ID!): Node
+}
+interface Node {
+  id: ID!
+  typename: String!
+}
+type User implements Node {
+  id: ID!
+  typename: String!
+  login: String!
+}
+`
+	tests := []struct {
+		name       string
+		operations string
+		// wantKey is the response key the error must report for the existing
+		// field. For an alias it is the alias, not the underlying field name.
+		wantKey string
+	}{
+		{
+			// A real `typename` field: its response key equals its field name, so
+			// the synthesized discriminator collides on response key "typename".
+			name: "real typename field",
+			operations: `query Q($id: ID!) {
+  node(id: $id) {
+    typename
+    id
+  }
+}
+`,
+			wantKey: "typename",
+		},
+		{
+			// `Typename: id` aliases id to response key "Typename", which collides
+			// with the synthesized discriminator by response key. The error must
+			// name the alias "Typename", not the underlying field "id".
+			name: "aliased response key",
+			operations: `query Q($id: ID!) {
+  node(id: $id) {
+    Typename: id
+  }
+}
+`,
+			wantKey: "Typename",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			schemaPath := filepath.Join(dir, "schema.graphqls")
+			opsPath := filepath.Join(dir, "operations.graphql")
+			require.NoError(t, os.WriteFile(schemaPath, []byte(schema), 0o600))
+			require.NoError(t, os.WriteFile(opsPath, []byte(test.operations), 0o600))
+
+			err := Run(schemaPath, opsPath, filepath.Join(dir, "generated"))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `Go field name "Typename"`)
+			assert.Contains(t, err.Error(), fmt.Sprintf(`response keys %q and "__typename"`, test.wantKey))
+		})
+	}
 }
 
 // copyDir copies all files from srcDir to dstDir

@@ -5,9 +5,11 @@
 # field name (first occurrence wins), so the flattened struct lists id, name,
 # email exactly once.
 #
-# Search dedupes a field selected on multiple disjoint union members: both
-# Player and Team select id (ID!), which collapses to a single flattened field,
-# while their distinct fields (score, rank) are unioned in.
+# Search selects a union with narrowing fragments on each member, so it is
+# modeled polymorphically: one variant struct per member. id is selected inside
+# each member fragment, so each variant carries its own id alongside its
+# distinct field (score, rank) — there is no cross-member collapse in the
+# polymorphic shape.
 #
 # NOTE: a field selected with conflicting types across members (e.g. Int! vs
 # String!) cannot be expressed here — gqlparser's SameResponseShape rule

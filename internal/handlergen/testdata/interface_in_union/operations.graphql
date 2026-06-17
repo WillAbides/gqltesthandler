@@ -3,12 +3,15 @@
 # FeedItem is a union of Article | Ad. Only Article implements the Authored
 # interface (partial implementation). The Feed operation narrows the interface
 # inside the union via `... on Authored`, which is valid because the interface's
-# possible types intersect the union's members. The generator flattens the
-# interface fragment, the concrete fragments, and __typename into one struct.
+# possible types intersect the union's members. Because the selection contains
+# narrowing fragments, the generator models it polymorphically: a discriminator
+# interface plus one variant struct per concrete member. `... on Authored`
+# resolves to {Article} (Ad does not implement Authored), so `author` lands on
+# the Article variant only and never leaks onto Ad.
 #
-# FeedNoTypename selects a union with no field in common except the inline
-# fragments themselves (no __typename, no shared scalar), pinning that the
-# flattened struct is just the union of the per-member selections.
+# FeedNoTypename selects the union with only the concrete inline fragments (no
+# __typename, no shared scalar), pinning that each member still becomes its own
+# variant struct carrying just that member's fields.
 query Feed {
   feed {
     __typename

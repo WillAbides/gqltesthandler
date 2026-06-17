@@ -66,6 +66,301 @@ func (t *CreateUser_CreateUser) GetName() string {
 	return t.Name
 }
 
+type GetNode_Node_User struct {
+	Name  string "json:\"name\" graphql:\"name\""
+	Email string "json:\"email\" graphql:\"email\""
+}
+
+func (t *GetNode_Node_User) GetName() string {
+	if t == nil {
+		t = &GetNode_Node_User{}
+	}
+	return t.Name
+}
+func (t *GetNode_Node_User) GetEmail() string {
+	if t == nil {
+		t = &GetNode_Node_User{}
+	}
+	return t.Email
+}
+
+type GetNode_Node_Post struct {
+	Title string "json:\"title\" graphql:\"title\""
+}
+
+func (t *GetNode_Node_Post) GetTitle() string {
+	if t == nil {
+		t = &GetNode_Node_Post{}
+	}
+	return t.Title
+}
+
+type GetNode_Node struct {
+	Post     GetNode_Node_Post "graphql:\"... on Post\""
+	User     GetNode_Node_User "graphql:\"... on User\""
+	Typename *string           "json:\"__typename,omitempty\" graphql:\"__typename\""
+	ID       string            "json:\"id\" graphql:\"id\""
+}
+
+func (t *GetNode_Node) GetPost() *GetNode_Node_Post {
+	if t == nil {
+		t = &GetNode_Node{}
+	}
+	return &t.Post
+}
+func (t *GetNode_Node) GetUser() *GetNode_Node_User {
+	if t == nil {
+		t = &GetNode_Node{}
+	}
+	return &t.User
+}
+func (t *GetNode_Node) GetTypename() *string {
+	if t == nil {
+		t = &GetNode_Node{}
+	}
+	return t.Typename
+}
+func (t *GetNode_Node) GetID() string {
+	if t == nil {
+		t = &GetNode_Node{}
+	}
+	return t.ID
+}
+
+type GetNodeAsUser_Node_User struct {
+	Name string "json:\"name\" graphql:\"name\""
+}
+
+func (t *GetNodeAsUser_Node_User) GetName() string {
+	if t == nil {
+		t = &GetNodeAsUser_Node_User{}
+	}
+	return t.Name
+}
+
+type GetNodeAsUser_Node struct {
+	User GetNodeAsUser_Node_User "graphql:\"... on User\""
+	ID   string                  "json:\"id\" graphql:\"id\""
+}
+
+func (t *GetNodeAsUser_Node) GetUser() *GetNodeAsUser_Node_User {
+	if t == nil {
+		t = &GetNodeAsUser_Node{}
+	}
+	return &t.User
+}
+func (t *GetNodeAsUser_Node) GetID() string {
+	if t == nil {
+		t = &GetNodeAsUser_Node{}
+	}
+	return t.ID
+}
+
+type GetNodeShared_Node struct {
+	ID string "json:\"id\" graphql:\"id\""
+}
+
+func (t *GetNodeShared_Node) GetID() string {
+	if t == nil {
+		t = &GetNodeShared_Node{}
+	}
+	return t.ID
+}
+
+type GetUserTypename_Node_User struct {
+	Typename *string "json:\"typename,omitempty\" graphql:\"typename\""
+	Name     string  "json:\"name\" graphql:\"name\""
+}
+
+func (t *GetUserTypename_Node_User) GetTypename() *string {
+	if t == nil {
+		t = &GetUserTypename_Node_User{}
+	}
+	return t.Typename
+}
+func (t *GetUserTypename_Node_User) GetName() string {
+	if t == nil {
+		t = &GetUserTypename_Node_User{}
+	}
+	return t.Name
+}
+
+type Search_Search_User struct {
+	ID   string "json:\"id\" graphql:\"id\""
+	Name string "json:\"name\" graphql:\"name\""
+}
+
+func (t *Search_Search_User) GetID() string {
+	if t == nil {
+		t = &Search_Search_User{}
+	}
+	return t.ID
+}
+func (t *Search_Search_User) GetName() string {
+	if t == nil {
+		t = &Search_Search_User{}
+	}
+	return t.Name
+}
+
+type Search_Search_Post struct {
+	ID    string "json:\"id\" graphql:\"id\""
+	Title string "json:\"title\" graphql:\"title\""
+}
+
+func (t *Search_Search_Post) GetID() string {
+	if t == nil {
+		t = &Search_Search_Post{}
+	}
+	return t.ID
+}
+func (t *Search_Search_Post) GetTitle() string {
+	if t == nil {
+		t = &Search_Search_Post{}
+	}
+	return t.Title
+}
+
+type Search_Search struct {
+	Post     Search_Search_Post "graphql:\"... on Post\""
+	User     Search_Search_User "graphql:\"... on User\""
+	Typename *string            "json:\"__typename,omitempty\" graphql:\"__typename\""
+}
+
+func (t *Search_Search) GetPost() *Search_Search_Post {
+	if t == nil {
+		t = &Search_Search{}
+	}
+	return &t.Post
+}
+func (t *Search_Search) GetUser() *Search_Search_User {
+	if t == nil {
+		t = &Search_Search{}
+	}
+	return &t.User
+}
+func (t *Search_Search) GetTypename() *string {
+	if t == nil {
+		t = &Search_Search{}
+	}
+	return t.Typename
+}
+
+type GetNodeRelated_Node_User struct {
+	Name string "json:\"name\" graphql:\"name\""
+}
+
+func (t *GetNodeRelated_Node_User) GetName() string {
+	if t == nil {
+		t = &GetNodeRelated_Node_User{}
+	}
+	return t.Name
+}
+
+type GetNodeRelated_Node_Post_Related_User struct {
+	Name string "json:\"name\" graphql:\"name\""
+}
+
+func (t *GetNodeRelated_Node_Post_Related_User) GetName() string {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related_User{}
+	}
+	return t.Name
+}
+
+type GetNodeRelated_Node_Post_Related_Post struct {
+	Title string "json:\"title\" graphql:\"title\""
+}
+
+func (t *GetNodeRelated_Node_Post_Related_Post) GetTitle() string {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related_Post{}
+	}
+	return t.Title
+}
+
+type GetNodeRelated_Node_Post_Related struct {
+	Post     GetNodeRelated_Node_Post_Related_Post "graphql:\"... on Post\""
+	User     GetNodeRelated_Node_Post_Related_User "graphql:\"... on User\""
+	Typename *string                               "json:\"__typename,omitempty\" graphql:\"__typename\""
+	ID       string                                "json:\"id\" graphql:\"id\""
+}
+
+func (t *GetNodeRelated_Node_Post_Related) GetPost() *GetNodeRelated_Node_Post_Related_Post {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related{}
+	}
+	return &t.Post
+}
+func (t *GetNodeRelated_Node_Post_Related) GetUser() *GetNodeRelated_Node_Post_Related_User {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related{}
+	}
+	return &t.User
+}
+func (t *GetNodeRelated_Node_Post_Related) GetTypename() *string {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related{}
+	}
+	return t.Typename
+}
+func (t *GetNodeRelated_Node_Post_Related) GetID() string {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post_Related{}
+	}
+	return t.ID
+}
+
+type GetNodeRelated_Node_Post struct {
+	Title   string                            "json:\"title\" graphql:\"title\""
+	Related *GetNodeRelated_Node_Post_Related "json:\"related,omitempty\" graphql:\"related\""
+}
+
+func (t *GetNodeRelated_Node_Post) GetTitle() string {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post{}
+	}
+	return t.Title
+}
+func (t *GetNodeRelated_Node_Post) GetRelated() *GetNodeRelated_Node_Post_Related {
+	if t == nil {
+		t = &GetNodeRelated_Node_Post{}
+	}
+	return t.Related
+}
+
+type GetNodeRelated_Node struct {
+	Post     GetNodeRelated_Node_Post "graphql:\"... on Post\""
+	User     GetNodeRelated_Node_User "graphql:\"... on User\""
+	Typename *string                  "json:\"__typename,omitempty\" graphql:\"__typename\""
+	ID       string                   "json:\"id\" graphql:\"id\""
+}
+
+func (t *GetNodeRelated_Node) GetPost() *GetNodeRelated_Node_Post {
+	if t == nil {
+		t = &GetNodeRelated_Node{}
+	}
+	return &t.Post
+}
+func (t *GetNodeRelated_Node) GetUser() *GetNodeRelated_Node_User {
+	if t == nil {
+		t = &GetNodeRelated_Node{}
+	}
+	return &t.User
+}
+func (t *GetNodeRelated_Node) GetTypename() *string {
+	if t == nil {
+		t = &GetNodeRelated_Node{}
+	}
+	return t.Typename
+}
+func (t *GetNodeRelated_Node) GetID() string {
+	if t == nil {
+		t = &GetNodeRelated_Node{}
+	}
+	return t.ID
+}
+
 type GetUser struct {
 	User *GetUser_User "json:\"user,omitempty\" graphql:\"user\""
 }
@@ -86,6 +381,72 @@ func (t *CreateUser) GetCreateUser() *CreateUser_CreateUser {
 		t = &CreateUser{}
 	}
 	return &t.CreateUser
+}
+
+type GetNode struct {
+	Node *GetNode_Node "json:\"node,omitempty\" graphql:\"node\""
+}
+
+func (t *GetNode) GetNode() *GetNode_Node {
+	if t == nil {
+		t = &GetNode{}
+	}
+	return t.Node
+}
+
+type GetNodeAsUser struct {
+	Node *GetNodeAsUser_Node "json:\"node,omitempty\" graphql:\"node\""
+}
+
+func (t *GetNodeAsUser) GetNode() *GetNodeAsUser_Node {
+	if t == nil {
+		t = &GetNodeAsUser{}
+	}
+	return t.Node
+}
+
+type GetNodeShared struct {
+	Node *GetNodeShared_Node "json:\"node,omitempty\" graphql:\"node\""
+}
+
+func (t *GetNodeShared) GetNode() *GetNodeShared_Node {
+	if t == nil {
+		t = &GetNodeShared{}
+	}
+	return t.Node
+}
+
+type GetUserTypename struct {
+	Node *GetUserTypename_Node_User "json:\"node,omitempty\" graphql:\"node\""
+}
+
+func (t *GetUserTypename) GetNode() *GetUserTypename_Node_User {
+	if t == nil {
+		t = &GetUserTypename{}
+	}
+	return t.Node
+}
+
+type Search struct {
+	Search []*Search_Search "json:\"search\" graphql:\"search\""
+}
+
+func (t *Search) GetSearch() []*Search_Search {
+	if t == nil {
+		t = &Search{}
+	}
+	return t.Search
+}
+
+type GetNodeRelated struct {
+	Node *GetNodeRelated_Node "json:\"node,omitempty\" graphql:\"node\""
+}
+
+func (t *GetNodeRelated) GetNode() *GetNodeRelated_Node {
+	if t == nil {
+		t = &GetNodeRelated{}
+	}
+	return t.Node
 }
 
 const GetUserDocument = `query GetUser ($id: ID!) {
@@ -140,7 +501,196 @@ func (c *Client) CreateUser(ctx context.Context, input CreateUserInput, intercep
 	return &res, nil
 }
 
+const GetNodeDocument = `query GetNode ($id: ID!) {
+	node(id: $id) {
+		__typename
+		id
+		... on User {
+			name
+			email
+		}
+		... on Post {
+			title
+		}
+	}
+}
+`
+
+func (c *Client) GetNode(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*GetNode, error) {
+	vars := map[string]any{
+		"id": id,
+	}
+
+	var res GetNode
+	if err := c.Client.Post(ctx, "GetNode", GetNodeDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
+const GetNodeAsUserDocument = `query GetNodeAsUser ($id: ID!) {
+	node(id: $id) {
+		id
+		... on User {
+			name
+		}
+	}
+}
+`
+
+func (c *Client) GetNodeAsUser(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*GetNodeAsUser, error) {
+	vars := map[string]any{
+		"id": id,
+	}
+
+	var res GetNodeAsUser
+	if err := c.Client.Post(ctx, "GetNodeAsUser", GetNodeAsUserDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
+const GetNodeSharedDocument = `query GetNodeShared ($id: ID!) {
+	node(id: $id) {
+		id
+	}
+}
+`
+
+func (c *Client) GetNodeShared(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*GetNodeShared, error) {
+	vars := map[string]any{
+		"id": id,
+	}
+
+	var res GetNodeShared
+	if err := c.Client.Post(ctx, "GetNodeShared", GetNodeSharedDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
+const GetUserTypenameDocument = `query GetUserTypename ($id: ID!) {
+	node(id: $id) {
+		... on User {
+			typename
+			name
+		}
+	}
+}
+`
+
+func (c *Client) GetUserTypename(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*GetUserTypename, error) {
+	vars := map[string]any{
+		"id": id,
+	}
+
+	var res GetUserTypename
+	if err := c.Client.Post(ctx, "GetUserTypename", GetUserTypenameDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
+const SearchDocument = `query Search ($term: String!) {
+	search(term: $term) {
+		__typename
+		... on User {
+			id
+			name
+		}
+		... on Post {
+			id
+			title
+		}
+	}
+}
+`
+
+func (c *Client) Search(ctx context.Context, term string, interceptors ...clientv2.RequestInterceptor) (*Search, error) {
+	vars := map[string]any{
+		"term": term,
+	}
+
+	var res Search
+	if err := c.Client.Post(ctx, "Search", SearchDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
+const GetNodeRelatedDocument = `query GetNodeRelated ($id: ID!) {
+	node(id: $id) {
+		__typename
+		id
+		... on User {
+			name
+		}
+		... on Post {
+			title
+			related {
+				__typename
+				id
+				... on User {
+					name
+				}
+				... on Post {
+					title
+				}
+			}
+		}
+	}
+}
+`
+
+func (c *Client) GetNodeRelated(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*GetNodeRelated, error) {
+	vars := map[string]any{
+		"id": id,
+	}
+
+	var res GetNodeRelated
+	if err := c.Client.Post(ctx, "GetNodeRelated", GetNodeRelatedDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
 var DocumentOperationNames = map[string]string{
-	GetUserDocument:    "GetUser",
-	CreateUserDocument: "CreateUser",
+	GetUserDocument:         "GetUser",
+	CreateUserDocument:      "CreateUser",
+	GetNodeDocument:         "GetNode",
+	GetNodeAsUserDocument:   "GetNodeAsUser",
+	GetNodeSharedDocument:   "GetNodeShared",
+	GetUserTypenameDocument: "GetUserTypename",
+	SearchDocument:          "Search",
+	GetNodeRelatedDocument:  "GetNodeRelated",
 }

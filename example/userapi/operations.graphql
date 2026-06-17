@@ -13,3 +13,83 @@ mutation CreateUser($input: CreateUserInput!) {
     email
   }
 }
+
+query GetNode($id: ID!) {
+  node(id: $id) {
+    __typename
+    id
+    ... on User {
+      name
+      email
+    }
+    ... on Post {
+      title
+    }
+  }
+}
+
+query GetNodeAsUser($id: ID!) {
+  node(id: $id) {
+    id
+    ... on User {
+      name
+    }
+  }
+}
+
+query GetNodeShared($id: ID!) {
+  node(id: $id) {
+    id
+  }
+}
+
+# GetUserTypename exercises a concrete object that selects a real field literally
+# named `typename`. It maps to Go field Typename, the same name the variant's
+# injected __typename discriminator uses, but the two coexist safely: the variant
+# carries `typename` as a struct field while MarshalJSON injects `__typename`
+# through an alias embed, so they serialize under distinct JSON keys.
+query GetUserTypename($id: ID!) {
+  node(id: $id) {
+    ... on User {
+      typename
+      name
+    }
+  }
+}
+
+query Search($term: String!) {
+  search(term: $term) {
+    __typename
+    ... on User {
+      id
+      name
+    }
+    ... on Post {
+      id
+      title
+    }
+  }
+}
+
+query GetNodeRelated($id: ID!) {
+  node(id: $id) {
+    __typename
+    id
+    ... on User {
+      name
+    }
+    ... on Post {
+      title
+      related {
+        __typename
+        id
+        ... on User {
+          name
+        }
+        ... on Post {
+          title
+        }
+      }
+    }
+  }
+}
