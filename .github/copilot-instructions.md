@@ -101,7 +101,7 @@ The snapshots are stored in `generated/` subdirectories within each test case's 
 2. **Parse operations** — `loadOperations()` uses `gqlparser.LoadQuery()` to parse the `.graphql` file; validates all operations are named
 3. **Extract operation data** — For each operation:
     - `extractVariables()` maps GraphQL variable types to Go types (String→string, Int→int, Float→float64, Boolean→bool, ID→string, enums and input objects by name, custom scalars→any)
-    - `extractSelectionFields()` recursively walks selection sets to build response type structures, creating nested structs for object fields
+    - `extractSelectionFields()` recursively walks selection sets to build response type structures, creating nested structs for object fields. Generated Go field names, JSON tags, dedupe, and nested struct names are keyed by each selection's **response key** (`sel.Alias` when present, otherwise `sel.Name`); the underlying `sel.Name`/schema definition is still used for type lookup. It returns an error when two distinct response keys would map to the same Go field name.
 4. **Collect referenced types** — `collectInputTypes()` and `collectEnumTypes()` recursively find all input object and enum types referenced by operation variables and response fields
 5. **Generate files** — Execute templates with operation data, then format with goimports and gofumpt
 6. **Write helpers** — Embed `helpers/helpers.go` with the package name replaced
@@ -215,6 +215,17 @@ GraphQL types are mapped to Go types as follows:
 
 Response types are shaped by the operation's selection set, not the full schema type. Nested object fields produce nested structs named `{OperationName}Response{FieldName}`.
 
+### Field Aliases (Response Keys)
+
+GraphQL responses are keyed by a selection's **response key** — its alias when one is present, otherwise the field name. The generator uses the response key for the generated Go field name, its JSON tag, duplicate/merge detection, and nested struct names, while still using the underlying field name (`sel.Name`) and schema definition for type lookup and GraphQL semantics.
+
+- Scalar alias: `handle: login` → `Handle string `json:"handle"``.
+- Object alias: `profile: user { id }` → field `Profile` of nested type `{OperationName}ResponseProfile` with json tag `profile`. Nested type names derive from the response key, so aliases produce intuitive names and avoid clashing with the un-aliased field's nested type.
+- Aliased `__typename`: `kind: __typename` → `Kind string `json:"kind"`` (a normal selected response key). Un-aliased `__typename` still maps to the exported Go field `Typename` with `json:"__typename"`.
+- Fragment spreads and inline fragments merge/dedupe by response key, consistent with GraphQL response semantics — the same response key contributed by multiple fragments or union members collapses to one field.
+
+The Go field name is derived from the response key by `exportedName` (uppercase first rune, plus the `id` → `ID` and `__typename` → `Typename` special cases). This mapping does **not** normalize snake_case to camelCase, so `foo_bar` and `fooBar` do not collide, but case-only differences do (e.g. `name` and `Name`). When two distinct response keys in the same selection-set level map to the same Go field name, generation fails with an error rather than emitting a struct with duplicate fields.
+
 ### Testing Pattern
 
 Tests use httptest.NewServer with the TestHandler:
@@ -232,6 +243,7 @@ Tests use httptest.NewServer with the TestHandler:
 - **Variables struct argument**: Expect methods accept a typed variables struct rather than expanded individual parameters, since GraphQL operations have a uniform `{"operationName", "variables"}` structure
 - **Response shaped by selection set**: Generated response types only include fields that the operation actually selects, matching what a real GraphQL server would return
 - **Nested response structs**: Object fields in selections generate nested structs (e.g., `GetUserResponseUser`) rather than reusing schema-level types, ensuring response shapes match the operation
+- **Aliases keyed by response key**: Generated Go field names, JSON tags, dedupe, and nested struct names use each selection's response key (`sel.Alias` when present, else `sel.Name`), matching how GraphQL keys response objects; the underlying field name/schema definition still drives type lookup. Two distinct response keys that would map to the same Go field name are a generation-time error.
 - **Options placement**: Options like `Times()` are passed to the Expect method, not the Respond method, for cleaner syntax: `ExpectGetUser(vars, Times(3)).Respond(...)`
 - **Custom handlers via Handle() method**: Each builder generates a `Handle()` method that accepts `func(VariablesType, http.ResponseWriter)`, providing full control over HTTP responses. The function always receives the variables from the incoming request. For an `Expect*` match those variables are equal to the registered variables by construction (matching requires variable equality); for a `Default*` they can be anything the client sent.
 - **GraphQL error support**: `RespondError()` returns standard GraphQL error responses with message, path, and extensions fields

@@ -125,7 +125,10 @@ func loadOperations(schema *ast.Schema, operationsPath string) ([]operationData,
 		}
 
 		vars := extractVariables(schema, op)
-		responseFields := extractSelectionFields(schema, op.SelectionSet, op.Name+"Response")
+		responseFields, fieldsErr := extractSelectionFields(schema, op.SelectionSet, op.Name+"Response")
+		if fieldsErr != nil {
+			return nil, fmt.Errorf("operation %q: %w", op.Name, fieldsErr)
+		}
 
 		ops = append(ops, operationData{
 			Name:             op.Name,
@@ -166,36 +169,63 @@ type selectionField struct {
 	TypeName     string // for nested object types, the generated struct name
 }
 
-func extractSelectionFields(schema *ast.Schema, selSet ast.SelectionSet, prefix string) []selectionField {
-	var fields []selectionField
-	seen := map[string]bool{}
-	extractSelectionFieldsInto(schema, selSet, prefix, &fields, seen)
-	return fields
+// responseKey is the alias when present, else the field name. GraphQL keys
+// response objects by it, while schema/type lookup still uses sel.Name.
+func responseKey(sel *ast.Field) string {
+	if sel.Alias != "" {
+		return sel.Alias
+	}
+	return sel.Name
 }
 
-func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, prefix string, fields *[]selectionField, seen map[string]bool) {
+func extractSelectionFields(schema *ast.Schema, selSet ast.SelectionSet, prefix string) ([]selectionField, error) {
+	var fields []selectionField
+	seen := map[string]bool{}
+	goNames := map[string]string{}
+	err := extractSelectionFieldsInto(schema, selSet, prefix, &fields, seen, goNames)
+	if err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+// extractSelectionFieldsInto dedupes selections by response key and fails when
+// two distinct keys map to the same Go field name, so generated structs never
+// get duplicate fields.
+func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, prefix string, fields *[]selectionField, seen map[string]bool, goNames map[string]string) error {
 	for _, sel := range selSet {
 		switch sel := sel.(type) {
 		case *ast.Field:
-			if seen[sel.Name] {
+			key := responseKey(sel)
+			if seen[key] {
 				continue
 			}
-			seen[sel.Name] = true
+			goName := exportedName(key)
+			prevKey, collides := goNames[goName]
+			if collides {
+				return fmt.Errorf("response keys %q and %q both map to Go field name %q in %s", prevKey, key, goName, prefix)
+			}
+			seen[key] = true
+			goNames[goName] = key
 
 			typeDef := schema.Types[sel.Definition.Type.Name()]
 			isObject := typeDef != nil && (typeDef.Kind == ast.Object || typeDef.Kind == ast.Interface || typeDef.Kind == ast.Union)
 
 			sf := selectionField{
 				GraphQLName: sel.Name,
-				GoName:      exportedName(sel.Name),
-				JSONName:    sel.Name,
+				GoName:      goName,
+				JSONName:    key,
 			}
 
 			switch {
 			case isObject && len(sel.SelectionSet) > 0:
-				nestedTypeName := prefix + exportedName(sel.Name)
+				nestedTypeName := prefix + goName
 				sf.TypeName = nestedTypeName
-				sf.NestedFields = extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
+				nested, err := extractSelectionFields(schema, sel.SelectionSet, nestedTypeName)
+				if err != nil {
+					return err
+				}
+				sf.NestedFields = nested
 				sf.GoType = wrapGoType(sel.Definition.Type, nestedTypeName)
 			case sel.Name == "__typename":
 				// The `__typename` meta-field is `String!` (non-null) per the
@@ -208,12 +238,19 @@ func extractSelectionFieldsInto(schema *ast.Schema, selSet ast.SelectionSet, pre
 			*fields = append(*fields, sf)
 		case *ast.FragmentSpread:
 			if sel.Definition != nil {
-				extractSelectionFieldsInto(schema, sel.Definition.SelectionSet, prefix, fields, seen)
+				err := extractSelectionFieldsInto(schema, sel.Definition.SelectionSet, prefix, fields, seen, goNames)
+				if err != nil {
+					return err
+				}
 			}
 		case *ast.InlineFragment:
-			extractSelectionFieldsInto(schema, sel.SelectionSet, prefix, fields, seen)
+			err := extractSelectionFieldsInto(schema, sel.SelectionSet, prefix, fields, seen, goNames)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // wrapGoType wraps a named type with pointer/slice based on the GraphQL type's nullability and list nesting.

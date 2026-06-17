@@ -131,6 +131,25 @@ handler.ExpectGetUser(usertest.GetUserVariables{ID: "1"}).Handle(
 )
 ```
 
+### Field Aliases
+
+Generated response types follow GraphQL response keys, so aliased selections map
+to Go fields named after the alias (with a matching JSON tag). For an operation
+like:
+
+```graphql
+query GetUser($id: ID!) {
+  profile: user(id: $id) {
+    handle: login
+  }
+}
+```
+
+the generator emits `Profile` (nested type `GetUserResponseProfile`, json tag
+`profile`) containing `Handle string `json:"handle"``. Un-aliased fields are
+unchanged. If two different response keys would collide on the same Go field
+name, generation fails with an error.
+
 ### Unmatched Operations
 
 The handler is **strict by default** for the operations the generator was run
