@@ -2,12 +2,21 @@
 
 package usertest
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
 	Path       []any          `json:"path,omitempty"`
 	Extensions map[string]any `json:"extensions,omitempty"`
 }
+
+type GetNodeSharedResponseNodeTypename string
+
+const (
+	GetNodeSharedResponseNodeTypenameUser GetNodeSharedResponseNodeTypename = "User"
+	GetNodeSharedResponseNodeTypenamePost GetNodeSharedResponseNodeTypename = "Post"
+)
 
 type CreateUserInput struct {
 	Name  string `json:"name"`
@@ -44,4 +53,275 @@ type CreateUserResponseCreateUser struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+}
+
+// GetNodeVariables contains the variables for the GetNode operation.
+type GetNodeVariables struct {
+	ID string `json:"id"`
+}
+
+// GetNodeResponse contains the data returned by the GetNode operation.
+type GetNodeResponse struct {
+	Node GetNodeResponseNode `json:"node"`
+}
+
+type GetNodeResponseNode interface {
+	isGetNodeResponseNode()
+}
+
+type GetNodeResponseNodeUser struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func (GetNodeResponseNodeUser) isGetNodeResponseNode() {}
+
+func (v GetNodeResponseNodeUser) MarshalJSON() ([]byte, error) {
+	type alias GetNodeResponseNodeUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type GetNodeResponseNodePost struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func (GetNodeResponseNodePost) isGetNodeResponseNode() {}
+
+func (v GetNodeResponseNodePost) MarshalJSON() ([]byte, error) {
+	type alias GetNodeResponseNodePost
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Post",
+		alias:    alias(v),
+	})
+}
+
+// GetNodeAsUserVariables contains the variables for the GetNodeAsUser operation.
+type GetNodeAsUserVariables struct {
+	ID string `json:"id"`
+}
+
+// GetNodeAsUserResponse contains the data returned by the GetNodeAsUser operation.
+type GetNodeAsUserResponse struct {
+	Node GetNodeAsUserResponseNode `json:"node"`
+}
+
+type GetNodeAsUserResponseNode interface {
+	isGetNodeAsUserResponseNode()
+}
+
+type GetNodeAsUserResponseNodeUser struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (GetNodeAsUserResponseNodeUser) isGetNodeAsUserResponseNode() {}
+
+func (v GetNodeAsUserResponseNodeUser) MarshalJSON() ([]byte, error) {
+	type alias GetNodeAsUserResponseNodeUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+// GetNodeSharedVariables contains the variables for the GetNodeShared operation.
+type GetNodeSharedVariables struct {
+	ID string `json:"id"`
+}
+
+// GetNodeSharedResponse contains the data returned by the GetNodeShared operation.
+type GetNodeSharedResponse struct {
+	Node *GetNodeSharedResponseNode `json:"node"`
+}
+
+type GetNodeSharedResponseNode struct {
+	Typename GetNodeSharedResponseNodeTypename `json:"__typename,omitempty"`
+	ID       string                            `json:"id"`
+}
+
+// GetUserTypenameVariables contains the variables for the GetUserTypename operation.
+type GetUserTypenameVariables struct {
+	ID string `json:"id"`
+}
+
+// GetUserTypenameResponse contains the data returned by the GetUserTypename operation.
+type GetUserTypenameResponse struct {
+	Node GetUserTypenameResponseNode `json:"node"`
+}
+
+type GetUserTypenameResponseNode interface {
+	isGetUserTypenameResponseNode()
+}
+
+type GetUserTypenameResponseNodeUser struct {
+	Typename *string `json:"typename"`
+	Name     string  `json:"name"`
+}
+
+func (GetUserTypenameResponseNodeUser) isGetUserTypenameResponseNode() {}
+
+func (v GetUserTypenameResponseNodeUser) MarshalJSON() ([]byte, error) {
+	type alias GetUserTypenameResponseNodeUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+// SearchVariables contains the variables for the Search operation.
+type SearchVariables struct {
+	Term string `json:"term"`
+}
+
+// SearchResponse contains the data returned by the Search operation.
+type SearchResponse struct {
+	Search []SearchResponseSearch `json:"search"`
+}
+
+type SearchResponseSearch interface {
+	isSearchResponseSearch()
+}
+
+type SearchResponseSearchUser struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (SearchResponseSearchUser) isSearchResponseSearch() {}
+
+func (v SearchResponseSearchUser) MarshalJSON() ([]byte, error) {
+	type alias SearchResponseSearchUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type SearchResponseSearchPost struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func (SearchResponseSearchPost) isSearchResponseSearch() {}
+
+func (v SearchResponseSearchPost) MarshalJSON() ([]byte, error) {
+	type alias SearchResponseSearchPost
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Post",
+		alias:    alias(v),
+	})
+}
+
+// GetNodeRelatedVariables contains the variables for the GetNodeRelated operation.
+type GetNodeRelatedVariables struct {
+	ID string `json:"id"`
+}
+
+// GetNodeRelatedResponse contains the data returned by the GetNodeRelated operation.
+type GetNodeRelatedResponse struct {
+	Node GetNodeRelatedResponseNode `json:"node"`
+}
+
+type GetNodeRelatedResponseNode interface {
+	isGetNodeRelatedResponseNode()
+}
+
+type GetNodeRelatedResponseNodeUser struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (GetNodeRelatedResponseNodeUser) isGetNodeRelatedResponseNode() {}
+
+func (v GetNodeRelatedResponseNodeUser) MarshalJSON() ([]byte, error) {
+	type alias GetNodeRelatedResponseNodeUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type GetNodeRelatedResponseNodePost struct {
+	ID      string                                `json:"id"`
+	Title   string                                `json:"title"`
+	Related GetNodeRelatedResponseNodePostRelated `json:"related"`
+}
+
+func (GetNodeRelatedResponseNodePost) isGetNodeRelatedResponseNode() {}
+
+func (v GetNodeRelatedResponseNodePost) MarshalJSON() ([]byte, error) {
+	type alias GetNodeRelatedResponseNodePost
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Post",
+		alias:    alias(v),
+	})
+}
+
+type GetNodeRelatedResponseNodePostRelated interface {
+	isGetNodeRelatedResponseNodePostRelated()
+}
+
+type GetNodeRelatedResponseNodePostRelatedUser struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (GetNodeRelatedResponseNodePostRelatedUser) isGetNodeRelatedResponseNodePostRelated() {}
+
+func (v GetNodeRelatedResponseNodePostRelatedUser) MarshalJSON() ([]byte, error) {
+	type alias GetNodeRelatedResponseNodePostRelatedUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type GetNodeRelatedResponseNodePostRelatedPost struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func (GetNodeRelatedResponseNodePostRelatedPost) isGetNodeRelatedResponseNodePostRelated() {}
+
+func (v GetNodeRelatedResponseNodePostRelatedPost) MarshalJSON() ([]byte, error) {
+	type alias GetNodeRelatedResponseNodePostRelatedPost
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Post",
+		alias:    alias(v),
+	})
 }

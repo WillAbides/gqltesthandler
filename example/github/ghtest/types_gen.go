@@ -2,6 +2,8 @@
 
 package ghtest
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
@@ -31,6 +33,36 @@ type PullRequestReviewThreadSubjectType string
 const (
 	PullRequestReviewThreadSubjectTypeFile PullRequestReviewThreadSubjectType = "FILE"
 	PullRequestReviewThreadSubjectTypeLine PullRequestReviewThreadSubjectType = "LINE"
+)
+
+type GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename string
+
+const (
+	GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypenameBot                   GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename = "Bot"
+	GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypenameEnterpriseUserAccount GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename = "EnterpriseUserAccount"
+	GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypenameMannequin             GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename = "Mannequin"
+	GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypenameOrganization          GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename = "Organization"
+	GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypenameUser                  GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename = "User"
+)
+
+type GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename string
+
+const (
+	GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypenameBot                   GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename = "Bot"
+	GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypenameEnterpriseUserAccount GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename = "EnterpriseUserAccount"
+	GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypenameMannequin             GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename = "Mannequin"
+	GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypenameOrganization          GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename = "Organization"
+	GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypenameUser                  GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename = "User"
+)
+
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename string
+
+const (
+	GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypenameBot                   GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename = "Bot"
+	GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypenameEnterpriseUserAccount GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename = "EnterpriseUserAccount"
+	GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypenameMannequin             GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename = "Mannequin"
+	GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypenameOrganization          GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename = "Organization"
+	GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypenameUser                  GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename = "User"
 )
 
 // GetPullRequestReviewsVariables contains the variables for the GetPullRequestReviews operation.
@@ -72,7 +104,8 @@ type GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodes struct {
 }
 
 type GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthor struct {
-	Url any `json:"url"`
+	Typename GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesAuthorTypename `json:"__typename,omitempty"`
+	Url      any                                                                          `json:"url"`
 }
 
 type GetPullRequestReviewsResponseRepositoryPullRequestReviewsNodesCommit struct {
@@ -148,7 +181,8 @@ type GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesComment
 }
 
 type GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthor struct {
-	Url any `json:"url"`
+	Typename GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesAuthorTypename `json:"__typename,omitempty"`
+	Url      any                                                                                             `json:"url"`
 }
 
 type GetPullRequestThreadsResponseRepositoryPullRequestReviewThreadsNodesCommentsNodesCommit struct {
@@ -181,46 +215,65 @@ type GetPullRequestThreadCommentsVariables struct {
 
 // GetPullRequestThreadCommentsResponse contains the data returned by the GetPullRequestThreadComments operation.
 type GetPullRequestThreadCommentsResponse struct {
-	Node *GetPullRequestThreadCommentsResponseNode `json:"node"`
+	Node GetPullRequestThreadCommentsResponseNode `json:"node"`
 }
 
-type GetPullRequestThreadCommentsResponseNode struct {
-	Comments GetPullRequestThreadCommentsResponseNodeComments `json:"comments"`
+type GetPullRequestThreadCommentsResponseNode interface {
+	isGetPullRequestThreadCommentsResponseNode()
 }
 
-type GetPullRequestThreadCommentsResponseNodeComments struct {
-	Nodes    []*GetPullRequestThreadCommentsResponseNodeCommentsNodes `json:"nodes"`
-	PageInfo GetPullRequestThreadCommentsResponseNodeCommentsPageInfo `json:"pageInfo"`
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThread struct {
+	Comments GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadComments `json:"comments"`
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsNodes struct {
-	FullDatabaseId    *any                                                                    `json:"fullDatabaseId"`
-	Author            *GetPullRequestThreadCommentsResponseNodeCommentsNodesAuthor            `json:"author"`
-	Body              string                                                                  `json:"body"`
-	CreatedAt         any                                                                     `json:"createdAt"`
-	DiffHunk          string                                                                  `json:"diffHunk"`
-	Commit            *GetPullRequestThreadCommentsResponseNodeCommentsNodesCommit            `json:"commit"`
-	OriginalCommit    *GetPullRequestThreadCommentsResponseNodeCommentsNodesOriginalCommit    `json:"originalCommit"`
-	PullRequestReview *GetPullRequestThreadCommentsResponseNodeCommentsNodesPullRequestReview `json:"pullRequestReview"`
+func (GetPullRequestThreadCommentsResponseNodePullRequestReviewThread) isGetPullRequestThreadCommentsResponseNode() {
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsNodesAuthor struct {
-	Url any `json:"url"`
+func (v GetPullRequestThreadCommentsResponseNodePullRequestReviewThread) MarshalJSON() ([]byte, error) {
+	type alias GetPullRequestThreadCommentsResponseNodePullRequestReviewThread
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "PullRequestReviewThread",
+		alias:    alias(v),
+	})
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsNodesCommit struct {
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadComments struct {
+	Nodes    []*GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodes `json:"nodes"`
+	PageInfo GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsPageInfo `json:"pageInfo"`
+}
+
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodes struct {
+	FullDatabaseId    *any                                                                                           `json:"fullDatabaseId"`
+	Author            *GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthor            `json:"author"`
+	Body              string                                                                                         `json:"body"`
+	CreatedAt         any                                                                                            `json:"createdAt"`
+	DiffHunk          string                                                                                         `json:"diffHunk"`
+	Commit            *GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesCommit            `json:"commit"`
+	OriginalCommit    *GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesOriginalCommit    `json:"originalCommit"`
+	PullRequestReview *GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesPullRequestReview `json:"pullRequestReview"`
+}
+
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthor struct {
+	Typename GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesAuthorTypename `json:"__typename,omitempty"`
+	Url      any                                                                                        `json:"url"`
+}
+
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesCommit struct {
 	Oid any `json:"oid"`
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsNodesOriginalCommit struct {
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesOriginalCommit struct {
 	Oid any `json:"oid"`
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsNodesPullRequestReview struct {
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsNodesPullRequestReview struct {
 	FullDatabaseId *any `json:"fullDatabaseId"`
 }
 
-type GetPullRequestThreadCommentsResponseNodeCommentsPageInfo struct {
+type GetPullRequestThreadCommentsResponseNodePullRequestReviewThreadCommentsPageInfo struct {
 	EndCursor   *string `json:"endCursor"`
 	HasNextPage bool    `json:"hasNextPage"`
 }

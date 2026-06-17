@@ -150,6 +150,113 @@ the generator emits `Profile` (nested type `GetUserResponseProfile`, json tag
 unchanged. If two different response keys would collide on the same Go field
 name, generation fails with an error.
 
+### Interfaces and Unions
+
+When an operation selects an interface or union field with at least one
+type-conditioned fragment that *narrows* the abstract type (for example
+`... on User` under a `Node` interface), the generator models it the way
+[genqlient][genqlient] does: a small discriminator interface plus one struct per
+concrete type reached by a narrowing type condition, instead of flattening every
+fragment's fields into a single struct. This makes invalid field combinations
+unrepresentable — you build a fixture by choosing the concrete variant you want.
+
+Given a union `search: [SearchResult!]!` where `SearchResult = User | Post`:
+
+```go
+handler.ExpectSearch(usertest.SearchVariables{Term: "go"}).Respond(usertest.SearchResponse{
+    Search: []usertest.SearchResponseSearch{
+        usertest.SearchResponseSearchUser{ID: "1", Name: "alice"},
+        usertest.SearchResponseSearchPost{ID: "2", Title: "gqltesthandler"},
+    },
+})
+```
+
+`SearchResponseSearch` is an interface implemented by each variant struct, so a
+field typed as the interface (or a slice of it) only accepts the generated
+variants. Interface-typed fields are emitted as the bare interface (no pointer),
+so a `nil` value marshals to JSON `null`.
+
+Variant fields follow each fragment's concrete possible types: a field selected
+under `... on SomeInterface` is attached only to the concrete types that
+actually implement that interface, never to sibling variants outside it. Fields
+selected directly on the abstract field — and fragments whose type condition
+does not narrow the abstract type (a spread or `... on` on the same interface or
+union) — are shared across every variant rather than triggering discrimination.
+
+**`__typename` is always injected for abstract variants.** Each variant struct
+carries a generated `MarshalJSON` that injects the correct `__typename` constant
+— you never set it yourself, and choosing the concrete variant struct already
+determines the runtime type. The discriminator is emitted unconditionally on
+every `Respond` payload, regardless of whether the incoming wire query selected
+`__typename`.
+
+**Shared-only abstract selections still carry a typed discriminator.** A
+selection with no narrowing fragment stays a single flat struct (see the note
+below), but that struct gains a typed `Typename` field whose type is a generated
+`<Struct>Typename` defined string with one constant per possible concrete type.
+genqlient injects `__typename` into the wire request for *every* abstract field —
+including a bare `node { id }` or a spread on the same interface — and requires it
+back, so the field lets a fixture supply it:
+
+```go
+// for a shared-only `node { id }` selection
+Node: &usertest.GetNodeSharedResponseNode{
+    Typename: usertest.GetNodeSharedResponseNodeTypenameUser, // or GetNodeSharedResponseNodeTypename("User")
+    ID:       "1",
+}
+```
+
+The tag depends on whether your operation selected `__typename`. When the
+operation **omits** it (synthesized for genqlient compatibility), the field is
+`json:"__typename,omitempty"`: set it to emit the discriminator a genqlient
+client needs, or leave it unset to write no `__typename` — so a strict
+gqlgenc-style decoder that did not select `__typename` still accepts the response.
+When the operation **explicitly selects** `__typename`, the field is plain
+`json:"__typename"` (no `omitempty`) and is always present, matching the GraphQL
+request shape. A broad interface produces a long constant list; you can ignore it
+and cast a string literal (`GetNodeSharedResponseNodeTypename("User")`) instead.
+
+A real field literally named `typename` maps to the same Go field `Typename` as
+the discriminator. Selecting both in the same flat struct is a generation-time
+error (the shared `both map to Go field name "Typename"` message) rather than
+uncompilable output. On a polymorphic *variant* the two coexist safely — the
+variant keeps `typename` as a struct field while its `MarshalJSON` injects
+`__typename` under a distinct JSON key — so that case is allowed.
+
+This matches [genqlient][genqlient], which auto-injects `__typename` into the
+wire request for abstract types (even when your `.graphql` operation file omits
+it) and requires it back to discriminate. gqltesthandler targets genqlient-style
+generated clients, so it infers that effective query shape and always returns the
+discriminator. A strict decoder such as gqlgenc's `graphqljson` rejects fields it
+did not select, so a gqlgenc-style client must select `__typename` on its
+narrowing abstract selections to consume the variant response; for shared-only
+selections the `omitempty` discriminator above keeps it compatible. gqlgenc strict
+no-extra-field behavior is not the controlling policy here.
+
+A custom `Handle()` responder writes the HTTP response itself, so it bypasses
+injection entirely — a `Handle()` function is responsible for emitting (or
+omitting) `__typename` to match whatever its client expects.
+
+> **Note:** A selection is modeled polymorphically when it contains at least one
+> type-conditioned fragment that *narrows* the abstract type to a proper subset
+> of its possible types. genqlient injects `__typename` for those selections
+> too, so even a single narrowing fragment produces variant structs. A
+> selection with no narrowing fragment — only shared fields, possibly via a
+> fragment on the same abstract type — stays a single flat struct rather than
+> expanding to one struct per possible type, but it still carries the typed
+> `Typename` discriminator described above so it stays genqlient-compatible
+> without the per-variant explosion.
+
+In polymorphic mode the generator emits a variant struct only for the concrete
+types reached by a narrowing type condition — not for every possible type of the
+abstract field. If an abstract selection can legally resolve to a concrete type
+for which the operation selected only shared fields (no narrowing fragment on
+it), that type has no generated variant, so the typed `Respond` API cannot
+construct that concrete response: use `Handle()` to write the raw JSON, or add a
+type condition for that type if you need to model it.
+
+[genqlient]: https://github.com/Khan/genqlient
+
 ### Unmatched Operations
 
 The handler is **strict by default** for the operations the generator was run

@@ -19,6 +19,18 @@ const (
 
 {{end -}}
 
+{{range .TypenameTypes -}}
+{{$tn := .Name -}}
+type {{.Name}} string
+
+const (
+{{- range .Values}}
+	{{.GoName}} {{$tn}} = "{{.Value}}"
+{{- end}}
+)
+
+{{end -}}
+
 {{range .InputTypes -}}
 type {{.Name}} struct {
 {{- range .Fields}}
@@ -48,10 +60,37 @@ type {{.ResponseType}} struct {
 
 {{define "nestedTypes"}}
 {{- range .}}
-{{- if .NestedFields}}
+{{- if .IsAbstract}}
+type {{.InterfaceName}} interface {
+	{{.SentinelMethod}}()
+}
+
+{{range .Variants}}
+type {{.StructName}} struct {
+{{- range .Fields}}
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}"`
+{{- end}}
+}
+
+func ({{.StructName}}) {{.SentinelMethod}}() {}
+
+func (v {{.StructName}}) MarshalJSON() ([]byte, error) {
+	type alias {{.StructName}}
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "{{.GraphQLType}}",
+		alias:    alias(v),
+	})
+}
+
+{{template "nestedTypes" .Fields}}
+{{- end}}
+{{- else if .NestedFields}}
 type {{.TypeName}} struct {
 {{- range .NestedFields}}
-	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}"`
+	{{.GoName}} {{.GoType}} `json:"{{.JSONName}}{{if .OmitEmpty}},omitempty{{end}}"`
 {{- end}}
 }
 

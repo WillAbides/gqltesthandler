@@ -2,6 +2,8 @@
 
 package generated
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
@@ -49,13 +51,47 @@ type GetNodeVariables struct {
 
 // GetNodeResponse contains the data returned by the GetNode operation.
 type GetNodeResponse struct {
-	Node *GetNodeResponseNode `json:"node"`
+	Node GetNodeResponseNode `json:"node"`
 }
 
-type GetNodeResponseNode struct {
+type GetNodeResponseNode interface {
+	isGetNodeResponseNode()
+}
+
+type GetNodeResponseNodeUser struct {
 	ID    string  `json:"id"`
 	Name  string  `json:"name"`
 	Email *string `json:"email"`
-	Title string  `json:"title"`
-	Body  string  `json:"body"`
+}
+
+func (GetNodeResponseNodeUser) isGetNodeResponseNode() {}
+
+func (v GetNodeResponseNodeUser) MarshalJSON() ([]byte, error) {
+	type alias GetNodeResponseNodeUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type GetNodeResponseNodePost struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
+func (GetNodeResponseNodePost) isGetNodeResponseNode() {}
+
+func (v GetNodeResponseNodePost) MarshalJSON() ([]byte, error) {
+	type alias GetNodeResponseNodePost
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Post",
+		alias:    alias(v),
+	})
 }

@@ -16,8 +16,14 @@ type TestHandler struct {
 	mu     sync.Mutex
 	served bool
 
-	getUserExpectResponses    expectResponses[GetUserVariables, getUserResult]
-	createUserExpectResponses expectResponses[CreateUserVariables, createUserResult]
+	getUserExpectResponses         expectResponses[GetUserVariables, getUserResult]
+	createUserExpectResponses      expectResponses[CreateUserVariables, createUserResult]
+	getNodeExpectResponses         expectResponses[GetNodeVariables, getNodeResult]
+	getNodeAsUserExpectResponses   expectResponses[GetNodeAsUserVariables, getNodeAsUserResult]
+	getNodeSharedExpectResponses   expectResponses[GetNodeSharedVariables, getNodeSharedResult]
+	getUserTypenameExpectResponses expectResponses[GetUserTypenameVariables, getUserTypenameResult]
+	searchExpectResponses          expectResponses[SearchVariables, searchResult]
+	getNodeRelatedExpectResponses  expectResponses[GetNodeRelatedVariables, getNodeRelatedResult]
 }
 
 func (s *TestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +61,12 @@ func (s *TestHandler) Reset() {
 	}
 	s.getUserExpectResponses.clear()
 	s.createUserExpectResponses.clear()
+	s.getNodeExpectResponses.clear()
+	s.getNodeAsUserExpectResponses.clear()
+	s.getNodeSharedExpectResponses.clear()
+	s.getUserTypenameExpectResponses.clear()
+	s.searchExpectResponses.clear()
+	s.getNodeRelatedExpectResponses.clear()
 }
 
 // getUserResult is the result interface for the GetUser operation.
@@ -263,4 +275,628 @@ func (s *TestHandler) ResetCreateUser(vars ...CreateUserVariables) {
 		return
 	}
 	s.createUserExpectResponses.clearByRequests(vars)
+}
+
+// getNodeResult is the result interface for the GetNode operation.
+type getNodeResult interface {
+	writeGetNodeResult(w http.ResponseWriter, vars GetNodeVariables) error
+}
+
+type getNodeDataResult struct {
+	data GetNodeResponse
+}
+
+func (r getNodeDataResult) writeGetNodeResult(w http.ResponseWriter, _ GetNodeVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type getNodeErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r getNodeErrorResult) writeGetNodeResult(w http.ResponseWriter, _ GetNodeVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type getNodeRawResult struct {
+	fn func(GetNodeVariables, http.ResponseWriter)
+}
+
+func (r getNodeRawResult) writeGetNodeResult(w http.ResponseWriter, vars GetNodeVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// GetNodeExpectation is a builder for setting the response of a GetNode
+// expectation or default.
+type GetNodeExpectation struct {
+	handler   *TestHandler
+	vars      GetNodeVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetNodeExpectation) register(resp getNodeResult) {
+	if b.isDefault {
+		b.handler.getNodeExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getNodeExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *GetNodeExpectation) Respond(data GetNodeResponse) {
+	b.register(getNodeDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *GetNodeExpectation) RespondError(errors ...GraphQLError) {
+	b.register(getNodeErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *GetNodeExpectation) Handle(fn func(GetNodeVariables, http.ResponseWriter)) {
+	b.register(getNodeRawResult{fn: fn})
+}
+
+// ExpectGetNode sets up an expectation for the GetNode operation.
+func (s *TestHandler) ExpectGetNode(vars GetNodeVariables, opts ...ExpectOption) *GetNodeExpectation {
+	return &GetNodeExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultGetNode returns a builder for the default GetNode responder,
+// used when no ExpectGetNode matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetNode() *GetNodeExpectation {
+	return &GetNodeExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetNode wipes registered expectations for the GetNode operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetNode records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetNode(vars ...GetNodeVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetNode called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getNodeExpectResponses.clear()
+		return
+	}
+	s.getNodeExpectResponses.clearByRequests(vars)
+}
+
+// getNodeAsUserResult is the result interface for the GetNodeAsUser operation.
+type getNodeAsUserResult interface {
+	writeGetNodeAsUserResult(w http.ResponseWriter, vars GetNodeAsUserVariables) error
+}
+
+type getNodeAsUserDataResult struct {
+	data GetNodeAsUserResponse
+}
+
+func (r getNodeAsUserDataResult) writeGetNodeAsUserResult(w http.ResponseWriter, _ GetNodeAsUserVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type getNodeAsUserErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r getNodeAsUserErrorResult) writeGetNodeAsUserResult(w http.ResponseWriter, _ GetNodeAsUserVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type getNodeAsUserRawResult struct {
+	fn func(GetNodeAsUserVariables, http.ResponseWriter)
+}
+
+func (r getNodeAsUserRawResult) writeGetNodeAsUserResult(w http.ResponseWriter, vars GetNodeAsUserVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// GetNodeAsUserExpectation is a builder for setting the response of a GetNodeAsUser
+// expectation or default.
+type GetNodeAsUserExpectation struct {
+	handler   *TestHandler
+	vars      GetNodeAsUserVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetNodeAsUserExpectation) register(resp getNodeAsUserResult) {
+	if b.isDefault {
+		b.handler.getNodeAsUserExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getNodeAsUserExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *GetNodeAsUserExpectation) Respond(data GetNodeAsUserResponse) {
+	b.register(getNodeAsUserDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *GetNodeAsUserExpectation) RespondError(errors ...GraphQLError) {
+	b.register(getNodeAsUserErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *GetNodeAsUserExpectation) Handle(fn func(GetNodeAsUserVariables, http.ResponseWriter)) {
+	b.register(getNodeAsUserRawResult{fn: fn})
+}
+
+// ExpectGetNodeAsUser sets up an expectation for the GetNodeAsUser operation.
+func (s *TestHandler) ExpectGetNodeAsUser(vars GetNodeAsUserVariables, opts ...ExpectOption) *GetNodeAsUserExpectation {
+	return &GetNodeAsUserExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultGetNodeAsUser returns a builder for the default GetNodeAsUser responder,
+// used when no ExpectGetNodeAsUser matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetNodeAsUser() *GetNodeAsUserExpectation {
+	return &GetNodeAsUserExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetNodeAsUser wipes registered expectations for the GetNodeAsUser operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetNodeAsUser records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetNodeAsUser(vars ...GetNodeAsUserVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetNodeAsUser called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getNodeAsUserExpectResponses.clear()
+		return
+	}
+	s.getNodeAsUserExpectResponses.clearByRequests(vars)
+}
+
+// getNodeSharedResult is the result interface for the GetNodeShared operation.
+type getNodeSharedResult interface {
+	writeGetNodeSharedResult(w http.ResponseWriter, vars GetNodeSharedVariables) error
+}
+
+type getNodeSharedDataResult struct {
+	data GetNodeSharedResponse
+}
+
+func (r getNodeSharedDataResult) writeGetNodeSharedResult(w http.ResponseWriter, _ GetNodeSharedVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type getNodeSharedErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r getNodeSharedErrorResult) writeGetNodeSharedResult(w http.ResponseWriter, _ GetNodeSharedVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type getNodeSharedRawResult struct {
+	fn func(GetNodeSharedVariables, http.ResponseWriter)
+}
+
+func (r getNodeSharedRawResult) writeGetNodeSharedResult(w http.ResponseWriter, vars GetNodeSharedVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// GetNodeSharedExpectation is a builder for setting the response of a GetNodeShared
+// expectation or default.
+type GetNodeSharedExpectation struct {
+	handler   *TestHandler
+	vars      GetNodeSharedVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetNodeSharedExpectation) register(resp getNodeSharedResult) {
+	if b.isDefault {
+		b.handler.getNodeSharedExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getNodeSharedExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *GetNodeSharedExpectation) Respond(data GetNodeSharedResponse) {
+	b.register(getNodeSharedDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *GetNodeSharedExpectation) RespondError(errors ...GraphQLError) {
+	b.register(getNodeSharedErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *GetNodeSharedExpectation) Handle(fn func(GetNodeSharedVariables, http.ResponseWriter)) {
+	b.register(getNodeSharedRawResult{fn: fn})
+}
+
+// ExpectGetNodeShared sets up an expectation for the GetNodeShared operation.
+func (s *TestHandler) ExpectGetNodeShared(vars GetNodeSharedVariables, opts ...ExpectOption) *GetNodeSharedExpectation {
+	return &GetNodeSharedExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultGetNodeShared returns a builder for the default GetNodeShared responder,
+// used when no ExpectGetNodeShared matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetNodeShared() *GetNodeSharedExpectation {
+	return &GetNodeSharedExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetNodeShared wipes registered expectations for the GetNodeShared operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetNodeShared records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetNodeShared(vars ...GetNodeSharedVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetNodeShared called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getNodeSharedExpectResponses.clear()
+		return
+	}
+	s.getNodeSharedExpectResponses.clearByRequests(vars)
+}
+
+// getUserTypenameResult is the result interface for the GetUserTypename operation.
+type getUserTypenameResult interface {
+	writeGetUserTypenameResult(w http.ResponseWriter, vars GetUserTypenameVariables) error
+}
+
+type getUserTypenameDataResult struct {
+	data GetUserTypenameResponse
+}
+
+func (r getUserTypenameDataResult) writeGetUserTypenameResult(w http.ResponseWriter, _ GetUserTypenameVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type getUserTypenameErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r getUserTypenameErrorResult) writeGetUserTypenameResult(w http.ResponseWriter, _ GetUserTypenameVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type getUserTypenameRawResult struct {
+	fn func(GetUserTypenameVariables, http.ResponseWriter)
+}
+
+func (r getUserTypenameRawResult) writeGetUserTypenameResult(w http.ResponseWriter, vars GetUserTypenameVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// GetUserTypenameExpectation is a builder for setting the response of a GetUserTypename
+// expectation or default.
+type GetUserTypenameExpectation struct {
+	handler   *TestHandler
+	vars      GetUserTypenameVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetUserTypenameExpectation) register(resp getUserTypenameResult) {
+	if b.isDefault {
+		b.handler.getUserTypenameExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getUserTypenameExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *GetUserTypenameExpectation) Respond(data GetUserTypenameResponse) {
+	b.register(getUserTypenameDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *GetUserTypenameExpectation) RespondError(errors ...GraphQLError) {
+	b.register(getUserTypenameErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *GetUserTypenameExpectation) Handle(fn func(GetUserTypenameVariables, http.ResponseWriter)) {
+	b.register(getUserTypenameRawResult{fn: fn})
+}
+
+// ExpectGetUserTypename sets up an expectation for the GetUserTypename operation.
+func (s *TestHandler) ExpectGetUserTypename(vars GetUserTypenameVariables, opts ...ExpectOption) *GetUserTypenameExpectation {
+	return &GetUserTypenameExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultGetUserTypename returns a builder for the default GetUserTypename responder,
+// used when no ExpectGetUserTypename matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetUserTypename() *GetUserTypenameExpectation {
+	return &GetUserTypenameExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetUserTypename wipes registered expectations for the GetUserTypename operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetUserTypename records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetUserTypename(vars ...GetUserTypenameVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetUserTypename called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getUserTypenameExpectResponses.clear()
+		return
+	}
+	s.getUserTypenameExpectResponses.clearByRequests(vars)
+}
+
+// searchResult is the result interface for the Search operation.
+type searchResult interface {
+	writeSearchResult(w http.ResponseWriter, vars SearchVariables) error
+}
+
+type searchDataResult struct {
+	data SearchResponse
+}
+
+func (r searchDataResult) writeSearchResult(w http.ResponseWriter, _ SearchVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type searchErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r searchErrorResult) writeSearchResult(w http.ResponseWriter, _ SearchVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type searchRawResult struct {
+	fn func(SearchVariables, http.ResponseWriter)
+}
+
+func (r searchRawResult) writeSearchResult(w http.ResponseWriter, vars SearchVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// SearchExpectation is a builder for setting the response of a Search
+// expectation or default.
+type SearchExpectation struct {
+	handler   *TestHandler
+	vars      SearchVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *SearchExpectation) register(resp searchResult) {
+	if b.isDefault {
+		b.handler.searchExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.searchExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *SearchExpectation) Respond(data SearchResponse) {
+	b.register(searchDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *SearchExpectation) RespondError(errors ...GraphQLError) {
+	b.register(searchErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *SearchExpectation) Handle(fn func(SearchVariables, http.ResponseWriter)) {
+	b.register(searchRawResult{fn: fn})
+}
+
+// ExpectSearch sets up an expectation for the Search operation.
+func (s *TestHandler) ExpectSearch(vars SearchVariables, opts ...ExpectOption) *SearchExpectation {
+	return &SearchExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultSearch returns a builder for the default Search responder,
+// used when no ExpectSearch matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultSearch() *SearchExpectation {
+	return &SearchExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetSearch wipes registered expectations for the Search operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetSearch records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetSearch(vars ...SearchVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetSearch called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.searchExpectResponses.clear()
+		return
+	}
+	s.searchExpectResponses.clearByRequests(vars)
+}
+
+// getNodeRelatedResult is the result interface for the GetNodeRelated operation.
+type getNodeRelatedResult interface {
+	writeGetNodeRelatedResult(w http.ResponseWriter, vars GetNodeRelatedVariables) error
+}
+
+type getNodeRelatedDataResult struct {
+	data GetNodeRelatedResponse
+}
+
+func (r getNodeRelatedDataResult) writeGetNodeRelatedResult(w http.ResponseWriter, _ GetNodeRelatedVariables) error {
+	return writeGraphQLData(w, r.data)
+}
+
+type getNodeRelatedErrorResult struct {
+	errors []GraphQLError
+}
+
+func (r getNodeRelatedErrorResult) writeGetNodeRelatedResult(w http.ResponseWriter, _ GetNodeRelatedVariables) error {
+	return writeGraphQLErrors(w, r.errors)
+}
+
+type getNodeRelatedRawResult struct {
+	fn func(GetNodeRelatedVariables, http.ResponseWriter)
+}
+
+func (r getNodeRelatedRawResult) writeGetNodeRelatedResult(w http.ResponseWriter, vars GetNodeRelatedVariables) error {
+	r.fn(vars, w)
+	return nil
+}
+
+// GetNodeRelatedExpectation is a builder for setting the response of a GetNodeRelated
+// expectation or default.
+type GetNodeRelatedExpectation struct {
+	handler   *TestHandler
+	vars      GetNodeRelatedVariables
+	opts      []ExpectOption
+	isDefault bool
+}
+
+func (b *GetNodeRelatedExpectation) register(resp getNodeRelatedResult) {
+	if b.isDefault {
+		b.handler.getNodeRelatedExpectResponses.setDefault(resp)
+		return
+	}
+	b.handler.getNodeRelatedExpectResponses.expect(b.handler.tb, b.vars, nil, resp, b.opts...)
+}
+
+// Respond sets the expectation to return the given data.
+func (b *GetNodeRelatedExpectation) Respond(data GetNodeRelatedResponse) {
+	b.register(getNodeRelatedDataResult{data: data})
+}
+
+// RespondError sets the expectation to return GraphQL errors.
+func (b *GetNodeRelatedExpectation) RespondError(errors ...GraphQLError) {
+	b.register(getNodeRelatedErrorResult{errors: errors})
+}
+
+// Handle sets the response to invoke a custom handler function. The function
+// receives the variables from the incoming request.
+func (b *GetNodeRelatedExpectation) Handle(fn func(GetNodeRelatedVariables, http.ResponseWriter)) {
+	b.register(getNodeRelatedRawResult{fn: fn})
+}
+
+// ExpectGetNodeRelated sets up an expectation for the GetNodeRelated operation.
+func (s *TestHandler) ExpectGetNodeRelated(vars GetNodeRelatedVariables, opts ...ExpectOption) *GetNodeRelatedExpectation {
+	return &GetNodeRelatedExpectation{
+		handler: s,
+		vars:    vars,
+		opts:    opts,
+	}
+}
+
+// DefaultGetNodeRelated returns a builder for the default GetNodeRelated responder,
+// used when no ExpectGetNodeRelated matches an incoming request. Defaults are
+// infinitely callable, never fail at cleanup, and a subsequent call replaces
+// the previous default.
+func (s *TestHandler) DefaultGetNodeRelated() *GetNodeRelatedExpectation {
+	return &GetNodeRelatedExpectation{
+		handler:   s,
+		isDefault: true,
+	}
+}
+
+// ResetGetNodeRelated wipes registered expectations for the GetNodeRelated operation
+// and disarms their cleanup errors. With no arguments it also clears the
+// default responder. With one or more vars it wipes only expectations whose
+// key matches; the default and non-matching expectations are left untouched.
+// A vars entry that matches nothing is a no-op for that entry. If the handler
+// has already served any request (checked handler-wide, not per-operation),
+// ResetGetNodeRelated records an error via tb.Errorf and leaves state untouched.
+func (s *TestHandler) ResetGetNodeRelated(vars ...GetNodeRelatedVariables) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.served {
+		s.tb.Errorf("TestHandler.ResetGetNodeRelated called after handler has served at least one request")
+		return
+	}
+	if len(vars) == 0 {
+		s.getNodeRelatedExpectResponses.clear()
+		return
+	}
+	s.getNodeRelatedExpectResponses.clearByRequests(vars)
 }

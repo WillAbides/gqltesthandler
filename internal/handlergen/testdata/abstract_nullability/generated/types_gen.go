@@ -9,6 +9,48 @@ type GraphQLError struct {
 	Extensions map[string]any `json:"extensions,omitempty"`
 }
 
+type AbstractsResponseNonNullListTypename string
+
+const (
+	AbstractsResponseNonNullListTypenameUser AbstractsResponseNonNullListTypename = "User"
+)
+
+type AbstractsResponseNullableElemsTypename string
+
+const (
+	AbstractsResponseNullableElemsTypenameUser AbstractsResponseNullableElemsTypename = "User"
+)
+
+type AbstractsResponseNullableListTypename string
+
+const (
+	AbstractsResponseNullableListTypenameUser AbstractsResponseNullableListTypename = "User"
+)
+
+type AbstractsResponseOuterNonNullTypename string
+
+const (
+	AbstractsResponseOuterNonNullTypenameUser AbstractsResponseOuterNonNullTypename = "User"
+)
+
+type AbstractsResponseOneNullableTypename string
+
+const (
+	AbstractsResponseOneNullableTypenameUser AbstractsResponseOneNullableTypename = "User"
+)
+
+type AbstractsResponseOneNonNullTypename string
+
+const (
+	AbstractsResponseOneNonNullTypenameUser AbstractsResponseOneNonNullTypename = "User"
+)
+
+type AbstractsResponseOnlyTypenameTypename string
+
+const (
+	AbstractsResponseOnlyTypenameTypenameUser AbstractsResponseOnlyTypenameTypename = "User"
+)
+
 // AbstractsVariables contains the variables for the Abstracts operation.
 type AbstractsVariables struct{}
 
@@ -24,36 +66,36 @@ type AbstractsResponse struct {
 }
 
 type AbstractsResponseNonNullList struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
-	Login    string `json:"login"`
+	Typename AbstractsResponseNonNullListTypename `json:"__typename"`
+	ID       string                               `json:"id"`
+	Login    string                               `json:"login"`
 }
 
 type AbstractsResponseNullableElems struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
+	Typename AbstractsResponseNullableElemsTypename `json:"__typename"`
+	ID       string                                 `json:"id"`
 }
 
 type AbstractsResponseNullableList struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
+	Typename AbstractsResponseNullableListTypename `json:"__typename"`
+	ID       string                                `json:"id"`
 }
 
 type AbstractsResponseOuterNonNull struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
+	Typename AbstractsResponseOuterNonNullTypename `json:"__typename"`
+	ID       string                                `json:"id"`
 }
 
 type AbstractsResponseOneNullable struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
+	Typename AbstractsResponseOneNullableTypename `json:"__typename"`
+	ID       string                               `json:"id"`
 }
 
 type AbstractsResponseOneNonNull struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
+	Typename AbstractsResponseOneNonNullTypename `json:"__typename"`
+	ID       string                              `json:"id"`
 }
 
 type AbstractsResponseOnlyTypename struct {
-	Typename string `json:"__typename"`
+	Typename AbstractsResponseOnlyTypenameTypename `json:"__typename"`
 }

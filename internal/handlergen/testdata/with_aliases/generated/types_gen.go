@@ -2,6 +2,8 @@
 
 package generated
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
@@ -31,10 +33,45 @@ type AliasesResponseProfileAccount struct {
 	OrgName string `json:"orgName"`
 }
 
-type AliasesResponseResults struct {
+type AliasesResponseResults interface {
+	isAliasesResponseResults()
+}
+
+type AliasesResponseResultsUser struct {
+	Tag      string `json:"tag"`
+	EntityId string `json:"entityId"`
+}
+
+func (AliasesResponseResultsUser) isAliasesResponseResults() {}
+
+func (v AliasesResponseResultsUser) MarshalJSON() ([]byte, error) {
+	type alias AliasesResponseResultsUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type AliasesResponseResultsRepository struct {
 	Tag      string `json:"tag"`
 	EntityId string `json:"entityId"`
 	RepoName string `json:"repoName"`
+}
+
+func (AliasesResponseResultsRepository) isAliasesResponseResults() {}
+
+func (v AliasesResponseResultsRepository) MarshalJSON() ([]byte, error) {
+	type alias AliasesResponseResultsRepository
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Repository",
+		alias:    alias(v),
+	})
 }
 
 // AliasSwapVariables contains the variables for the AliasSwap operation.

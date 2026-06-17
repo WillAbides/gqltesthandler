@@ -1,0 +1,56 @@
+query Feed {
+  feed {
+    __typename
+    ... on Article {
+      id
+      title
+      author {
+        __typename
+        ... on Person {
+          name
+          email
+        }
+        ... on Org {
+          name
+          memberCount
+        }
+      }
+    }
+    ... on Photo {
+      id
+      url
+      caption
+    }
+  }
+}
+
+query GetNode($id: ID!) {
+  node(id: $id) {
+    id
+    ... on Article {
+      ...ArticleFields
+    }
+    ... on Photo {
+      url
+    }
+  }
+}
+
+query Entities {
+  entities {
+    __typename
+    ... on Timestamped {
+      createdAt
+    }
+    ... on Photo {
+      url
+    }
+    ... on Person {
+      name
+    }
+  }
+}
+
+fragment ArticleFields on Article {
+  title
+}

@@ -1,0 +1,58 @@
+# ZeroFragment: an abstract field selecting only a shared field — no type
+# conditions, no __typename in the operation. It stays a single flat struct that
+# still carries a typed, settable __typename discriminator (NodeTypename) so a
+# fixture can emit the __typename genqlient injects and requires for every
+# abstract field.
+query ZeroFragment($id: ID!) {
+  node(id: $id) {
+    id
+  }
+}
+
+# ExplicitTypename: a shared-only abstract selection that explicitly selects
+# __typename, so the typed discriminator keeps a plain json:"__typename" tag (no
+# omitempty) and is always present — matching the request shape — rather than a
+# synthesized opt-in field.
+query ExplicitTypename($id: ID!) {
+  node(id: $id) {
+    __typename
+    id
+  }
+}
+
+# SingleVariant: exactly one concrete type condition, operation omits __typename.
+# Still modeled polymorphically (a discriminator interface plus a single User
+# variant whose MarshalJSON injects __typename), matching genqlient — any
+# narrowing fragment discriminates.
+query SingleVariant($id: ID!) {
+  node(id: $id) {
+    id
+    ... on User {
+      login
+    }
+  }
+}
+
+# SharedSpread: a fragment spread whose type condition is the same abstract type
+# as the parent (Node) does not narrow, so its fields are shared and the
+# selection stays a single flat struct (no variant explosion) with the typed
+# __typename discriminator for genqlient compatibility.
+query SharedSpread($id: ID!) {
+  node(id: $id) {
+    ...NodeFields
+  }
+}
+
+# SharedInline: an inline fragment on the same abstract type also does not
+# narrow, so it stays a single flat struct.
+query SharedInline($id: ID!) {
+  node(id: $id) {
+    ... on Node {
+      id
+    }
+  }
+}
+
+fragment NodeFields on Node {
+  id
+}

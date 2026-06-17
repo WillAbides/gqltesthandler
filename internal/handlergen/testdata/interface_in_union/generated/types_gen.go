@@ -2,6 +2,8 @@
 
 package generated
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
@@ -17,11 +19,43 @@ type FeedResponse struct {
 	Feed []FeedResponseFeed `json:"feed"`
 }
 
-type FeedResponseFeed struct {
-	Typename string `json:"__typename"`
-	Author   string `json:"author"`
-	Title    string `json:"title"`
-	Sponsor  string `json:"sponsor"`
+type FeedResponseFeed interface {
+	isFeedResponseFeed()
+}
+
+type FeedResponseFeedArticle struct {
+	Author string `json:"author"`
+	Title  string `json:"title"`
+}
+
+func (FeedResponseFeedArticle) isFeedResponseFeed() {}
+
+func (v FeedResponseFeedArticle) MarshalJSON() ([]byte, error) {
+	type alias FeedResponseFeedArticle
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Article",
+		alias:    alias(v),
+	})
+}
+
+type FeedResponseFeedAd struct {
+	Sponsor string `json:"sponsor"`
+}
+
+func (FeedResponseFeedAd) isFeedResponseFeed() {}
+
+func (v FeedResponseFeedAd) MarshalJSON() ([]byte, error) {
+	type alias FeedResponseFeedAd
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Ad",
+		alias:    alias(v),
+	})
 }
 
 // FeedNoTypenameVariables contains the variables for the FeedNoTypename operation.
@@ -32,7 +66,40 @@ type FeedNoTypenameResponse struct {
 	Feed []FeedNoTypenameResponseFeed `json:"feed"`
 }
 
-type FeedNoTypenameResponseFeed struct {
-	Title   string `json:"title"`
+type FeedNoTypenameResponseFeed interface {
+	isFeedNoTypenameResponseFeed()
+}
+
+type FeedNoTypenameResponseFeedArticle struct {
+	Title string `json:"title"`
+}
+
+func (FeedNoTypenameResponseFeedArticle) isFeedNoTypenameResponseFeed() {}
+
+func (v FeedNoTypenameResponseFeedArticle) MarshalJSON() ([]byte, error) {
+	type alias FeedNoTypenameResponseFeedArticle
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Article",
+		alias:    alias(v),
+	})
+}
+
+type FeedNoTypenameResponseFeedAd struct {
 	Sponsor string `json:"sponsor"`
+}
+
+func (FeedNoTypenameResponseFeedAd) isFeedNoTypenameResponseFeed() {}
+
+func (v FeedNoTypenameResponseFeedAd) MarshalJSON() ([]byte, error) {
+	type alias FeedNoTypenameResponseFeedAd
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Ad",
+		alias:    alias(v),
+	})
 }

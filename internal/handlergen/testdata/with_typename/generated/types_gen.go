@@ -2,6 +2,8 @@
 
 package generated
 
+import "encoding/json"
+
 // GraphQLError represents a GraphQL error in the response.
 type GraphQLError struct {
 	Message    string         `json:"message"`
@@ -19,9 +21,42 @@ type SearchResponse struct {
 	Search []SearchResponseSearch `json:"search"`
 }
 
-type SearchResponseSearch struct {
-	Typename string `json:"__typename"`
-	ID       string `json:"id"`
-	Login    string `json:"login"`
-	Name     string `json:"name"`
+type SearchResponseSearch interface {
+	isSearchResponseSearch()
+}
+
+type SearchResponseSearchUser struct {
+	ID    string `json:"id"`
+	Login string `json:"login"`
+}
+
+func (SearchResponseSearchUser) isSearchResponseSearch() {}
+
+func (v SearchResponseSearchUser) MarshalJSON() ([]byte, error) {
+	type alias SearchResponseSearchUser
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "User",
+		alias:    alias(v),
+	})
+}
+
+type SearchResponseSearchRepository struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (SearchResponseSearchRepository) isSearchResponseSearch() {}
+
+func (v SearchResponseSearchRepository) MarshalJSON() ([]byte, error) {
+	type alias SearchResponseSearchRepository
+	return json.Marshal(struct {
+		Typename string `json:"__typename"`
+		alias
+	}{
+		Typename: "Repository",
+		alias:    alias(v),
+	})
 }
