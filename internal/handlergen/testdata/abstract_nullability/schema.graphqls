@@ -1,0 +1,18 @@
+type Query {
+  nonNullList: [Node!]!
+  nullableElems: [Node]
+  nullableList: [Node!]
+  outerNonNull: [Node]!
+  oneNullable: Node
+  oneNonNull: Node!
+  onlyTypename: Node
+}
+
+interface Node {
+  id: ID!
+}
+
+type User implements Node {
+  id: ID!
+  login: String!
+}

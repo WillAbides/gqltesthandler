@@ -1,0 +1,23 @@
+# Exercises a real schema field literally named `typename` (not the __typename
+# meta-field). exportedName maps it to the Go name `Typename` with a
+# json:"typename" tag. Selecting it alone (no __typename in the same set) is
+# unambiguous and compiles. It is selected directly, nested under child, and
+# via a fragment spread to cover the nested/shared cases.
+#
+# NOTE: selecting both __typename and a real `typename` field in the same set
+# collides (both map to Go field `Typename`); the generator detects this and
+# fails generation with an error. That case is pinned in TestTypenameCollision
+# rather than here.
+query GetWidget($id: ID!) {
+  widget(id: $id) {
+    id
+    typename
+    child {
+      ...WidgetTypename
+    }
+  }
+}
+
+fragment WidgetTypename on Widget {
+  typename
+}

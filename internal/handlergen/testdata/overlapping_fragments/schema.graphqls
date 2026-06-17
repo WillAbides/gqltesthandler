@@ -1,0 +1,22 @@
+type Query {
+  user(id: ID!): User
+  search(query: String!): [SearchResult!]!
+}
+
+union SearchResult = Player | Team
+
+type User {
+  id: ID!
+  name: String!
+  email: String
+}
+
+type Player {
+  id: ID!
+  score: Int!
+}
+
+type Team {
+  id: ID!
+  rank: Int!
+}

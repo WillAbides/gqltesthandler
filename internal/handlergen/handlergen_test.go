@@ -34,6 +34,26 @@ func TestRun(t *testing.T) {
 			name:        "with_aliases",
 			testdataDir: "testdata/with_aliases",
 		},
+		{
+			name:        "with_directives",
+			testdataDir: "testdata/with_directives",
+		},
+		{
+			name:        "abstract_nullability",
+			testdataDir: "testdata/abstract_nullability",
+		},
+		{
+			name:        "overlapping_fragments",
+			testdataDir: "testdata/overlapping_fragments",
+		},
+		{
+			name:        "interface_in_union",
+			testdataDir: "testdata/interface_in_union",
+		},
+		{
+			name:        "real_typename_field",
+			testdataDir: "testdata/real_typename_field",
+		},
 	}
 
 	for _, test := range tests {
@@ -122,6 +142,37 @@ type User {
 	assert.Contains(t, err.Error(), `Go field name "Name"`)
 	assert.Contains(t, err.Error(), `"name"`)
 	assert.Contains(t, err.Error(), `"Name"`)
+}
+
+func TestTypenameCollision(t *testing.T) {
+	dir := t.TempDir()
+	schemaPath := filepath.Join(dir, "schema.graphqls")
+	operationsPath := filepath.Join(dir, "operations.graphql")
+
+	schema := `type Query {
+  thing: Thing
+}
+
+type Thing {
+  id: ID!
+  typename: String!
+}
+`
+	operations := `query TypenameCollide {
+  thing {
+    __typename
+    typename
+  }
+}
+`
+	require.NoError(t, os.WriteFile(schemaPath, []byte(schema), 0o600))
+	require.NoError(t, os.WriteFile(operationsPath, []byte(operations), 0o600))
+
+	err := Run(schemaPath, operationsPath, filepath.Join(dir, "generated"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `Go field name "Typename"`)
+	assert.Contains(t, err.Error(), `"__typename"`)
+	assert.Contains(t, err.Error(), `"typename"`)
 }
 
 func TestExportedName(t *testing.T) {
